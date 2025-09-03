@@ -368,10 +368,11 @@ const ChildLoginForm: React.FC = () => {
     } catch (err: any) {
       console.error('Child login error:', err);
       
-      // The error is already handled by retryOperation -> handleError
-      // Just reset loading state
-      setIsLoading(false);
-        
+      let errorCode = 'UNKNOWN_ERROR';
+      let errorMessage = 'Something went wrong';
+      let statusCode = err.response?.status;
+      
+      if (err.response) {
         if (err.response.data?.error) {
           errorCode = err.response.data.error.code || 'UNKNOWN_ERROR';
           errorMessage = err.response.data.error.message || 'Something went wrong';
