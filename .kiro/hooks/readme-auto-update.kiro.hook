@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "name": "README Auto-Update",
+  "description": "Automatically updates README.md when code files, features, or configuration changes are detected to maintain accurate project documentation",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "backend/src/**/*.ts",
+      "frontend/src/**/*.tsx",
+      "backend/package.json",
+      "frontend/package.json",
+      "docker-compose.yml",
+      "backend/prisma/schema.prisma"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Code changes have been detected in the AI Study Planner project. Please review the current README.md file and update it to reflect any new features, API changes, component additions, database schema updates, or configuration changes. Focus on keeping the documentation accurate and helpful for developers and users. Include any new setup instructions, feature descriptions, or architectural changes that may have occurred."
+  }
+}
