@@ -1,0 +1,25 @@
+{
+  "enabled": true,
+  "name": "Spec Design Task Review",
+  "description": "Monitors for new specification documents, design files, and task files to provide automated review and validation",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*spec*.md",
+      "**/*design*.md",
+      "**/*task*.md",
+      "**/*SPEC*.md",
+      "**/*DESIGN*.md",
+      "**/*TASK*.md",
+      "**/*.spec.ts",
+      "**/*.spec.js",
+      "**/*.design.tsx",
+      "**/*.design.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "New specification, design, or task files have been created or modified. Please review these files for:\n\n1. **Specifications**: Validate completeness, clarity, technical feasibility, and alignment with the AI Study Planner product requirements\n2. **Design Files**: Check for consistency with the design system, accessibility compliance, and user experience best practices\n3. **Task Files**: Ensure tasks are well-defined, have clear acceptance criteria, and align with project architecture\n4 **Steering Docs**: Ensure steerign docs are updated with the new changes \n\nProvide feedback on:\n- Missing requirements or unclear specifications\n- Potential technical challenges or architectural concerns\n- Consistency with existing codebase patterns\n- Security and privacy considerations for child safety\n- Performance implications\n- Testing requirements\n\nFocus on actionable feedback that helps maintain code quality and product standards."
+  }
+}

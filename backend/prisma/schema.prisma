@@ -1,0 +1,785 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String    @id @default(cuid())
+  email                   String    @unique
+  passwordHash            String
+  role                    Role      @default(PARENT)
+  isEmailVerified         Boolean   @default(false)
+  emailVerificationToken  String?   @unique
+  passwordResetToken      String?   @unique
+  passwordResetExpires    DateTime?
+  firstName               String?
+  lastName                String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  // Relations
+  children                ChildProfile[]
+  refreshTokens           RefreshToken[]
+  securityLogs            SecurityLog[]
+  notifications           Notification[]
+  socialAuthProviders     SocialAuthProvider[]
+  settings                UserSettings?
+
+  @@map("users")
+}
+
+model ChildProfile {
+  id                String          @id @default(cuid())
+  parentId          String
+  name              String
+  age               Int
+  gradeLevel        String
+  learningStyle     LearningStyle   @default(MIXED)
+  username          String          @unique
+  pinHash           String
+  preferences       Json            @default("{}")
+  skillProfile      Json            @default("{}") // Stores ChildSkillProfile data
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relations
+  parent            User            @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  studyPlans        StudyPlan[]
+  progressRecords   ProgressRecord[]
+  achievements      Achievement[]
+  helpRequests      HelpRequest[]
+  refreshTokens     RefreshToken[]
+  securityLogs      SecurityLog[]
+  conversationLogs  ConversationLog[]
+  settings          ChildSettings?
+  contentInteractions ContentInteraction[]
+  parentalApprovalRequests ParentalApprovalRequest[]
+  resourceUsage     ResourceUsage[]
+  loginSessions     ChildLoginSession[]
+  learningStreaks   LearningStreak[]
+  parentNotifications ParentNotification[]
+
+  @@map("child_profiles")
+}
+
+model StudyPlan {
+  id                String              @id @default(cuid())
+  childId           String
+  subject           String
+  difficulty        String
+  objectives        Json                @default("[]")
+  status            StudyPlanStatus     @default(DRAFT)
+  estimatedDuration Int?                // in minutes
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  activities        StudyActivity[]
+
+  @@map("study_plans")
+}
+
+model StudyActivity {
+  id                    String              @id @default(cuid())
+  planId                String
+  title                 String
+  description           String
+  content               Json                @default("{}")
+  estimatedDuration     Int                 // in minutes
+  difficulty            Int                 @default(1) // 1-10 scale
+  prerequisites         Json                @default("[]")
+  completionCriteria    Json                @default("{}")
+  orderIndex            Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  plan                  StudyPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  progressRecords       ProgressRecord[]
+  studyContent          StudyContent[]
+
+  @@map("study_activities")
+}
+
+model ProgressRecord {
+  id                String              @id @default(cuid())
+  childId           String
+  activityId        String
+  status            ProgressStatus      @default(NOT_STARTED)
+  score             Float?              @default(0)
+  timeSpent         Int                 @default(0) // in minutes
+  attempts          Int                 @default(0)
+  completedAt       DateTime?
+  sessionData       Json                @default("{}") // Enhanced session tracking data
+  helpRequestsCount Int                 @default(0) // Count of help requests for this activity
+  pauseCount        Int                 @default(0) // Number of times activity was paused
+  resumeCount       Int                 @default(0) // Number of times activity was resumed
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  activity          StudyActivity       @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  helpRequests      HelpRequest[]
+
+  @@unique([childId, activityId])
+  @@map("progress_records")
+}
+
+model Achievement {
+  id                String              @id @default(cuid())
+  childId           String
+  type              AchievementType
+  title             String
+  description       String
+  iconUrl           String?
+  points            Int                 @default(0)
+  earnedAt          DateTime            @default(now())
+  celebrationShown  Boolean             @default(false) // Whether celebration was shown to child
+  parentNotified    Boolean             @default(false) // Whether parent was notified
+  earnedInSession   String?             // Session ID where badge was earned
+
+  // Relations
+  child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@map("achievements")
+}
+
+model HelpRequest {
+  id                String              @id @default(cuid())
+  childId           String
+  activityId        String
+  progressRecordId  String?
+  question          String
+  response          String?
+  context           Json                @default("{}")
+  timestamp         DateTime            @default(now())
+  tokensUsed        Int                 @default(0)
+  isResolved        Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  progressRecord    ProgressRecord?     @relation(fields: [progressRecordId], references: [id], onDelete: SetNull)
+
+  @@map("help_requests")
+}
+
+model ParentNotification {
+  id                String              @id @default(cuid())
+  childId           String
+  type              String              // 'frequent_help_requests', 'struggling_with_topic', 'help_pattern_change'
+  message           String
+  helpRequestCount  Int                 @default(0)
+  timeframe         String              @default("week")
+  suggestions       Json                @default("[]")
+  isRead            Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@map("parent_notifications")
+}
+
+model RefreshToken {
+  id                String              @id @default(cuid())
+  token             String              @unique
+  userId            String?
+  childId           String?
+  expiresAt         DateTime
+  isRevoked         Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+
+  // Relations
+  user              User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  child             ChildProfile?       @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model ClaudeUsage {
+  id                String              @id @default(cuid())
+  requestType       String
+  promptTokens      Int
+  completionTokens  Int
+  totalTokens       Int
+  cost              Float?
+  childId           String?
+  createdAt         DateTime            @default(now())
+
+  @@map("claude_usage")
+}
+
+model AiUsage {
+  id                String              @id @default(cuid())
+  requestType       String
+  inputTokens       Int
+  outputTokens      Int
+  totalTokens       Int
+  estimatedCost     Decimal             @db.Decimal(10, 6)
+  userId            String
+  childId           String?
+  success           Boolean             @default(true)
+  timestamp         DateTime            @default(now())
+
+  @@index([requestType])
+  @@index([userId])
+  @@index([childId])
+  @@index([timestamp])
+  @@map("ai_usage")
+}
+
+model ErrorLog {
+  id                String              @id @default(cuid())
+  errorId           String?             // Frontend-generated error ID
+  errorType         String
+  endpoint          String?
+  message           String              // Renamed from errorMessage for consistency
+  errorMessage      String?             // Keep for backward compatibility
+  userId            String?             // Made optional for child errors
+  requestId         String?             // Made optional
+  timestamp         DateTime            @default(now())
+  
+  // Child authentication error specific fields
+  stack             String?
+  componentStack    String?
+  userAgent         String?
+  url               String?
+  sessionCorruption String?             // JSON string of corruption issues
+  retryCount        Int?                @default(0)
+  ipAddress         String?
+  severity          String?             @default("medium") // low, medium, high, critical
+
+  @@index([errorType])
+  @@index([endpoint])
+  @@index([timestamp])
+  @@index([errorId])
+  @@index([severity])
+  @@map("error_logs")
+}
+
+model PerformanceMetric {
+  id                String              @id @default(cuid())
+  endpoint          String
+  method            String
+  responseTimeMs    Decimal             @db.Decimal(10, 2)
+  statusCode        Int
+  userId            String?
+  requestId         String
+  timestamp         DateTime            @default(now())
+
+  @@index([endpoint])
+  @@index([timestamp])
+  @@map("performance_metrics")
+}
+
+model ConversationLog {
+  id                String              @id @default(cuid())
+  childId           String
+  question          String
+  response          String
+  activityId        String
+  flagged           Boolean             @default(false)
+  concerns          Json?               @default("[]")
+  timestamp         DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@index([activityId])
+  @@index([flagged])
+  @@index([timestamp])
+  @@map("conversation_logs")
+}
+
+model Notification {
+  id                String              @id @default(cuid())
+  userId            String
+  type              String
+  message           String
+  details           Json?               @default("{}")
+  read              Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// Enums
+enum Role {
+  PARENT
+  CHILD
+}
+
+enum LearningStyle {
+  VISUAL
+  AUDITORY
+  KINESTHETIC
+  MIXED
+}
+
+enum StudyPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  PAUSED
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  NEEDS_HELP
+}
+
+enum AchievementType {
+  BADGE
+  MILESTONE
+  STREAK
+}
+
+enum SecurityEventType {
+  AUTHENTICATION
+  AUTHORIZATION
+  ACCESS_CONTROL
+  DATA_ACCESS
+  ACCOUNT_CHANGE
+  SUSPICIOUS_ACTIVITY
+  SYSTEM
+}
+
+model SecurityLog {
+  id                String              @id @default(cuid())
+  eventType         SecurityEventType
+  userId            String?
+  childId           String?
+  ipAddress         String?
+  userAgent         String?
+  details           Json                @default("{}")
+  timestamp         DateTime            @default(now())
+
+  // Relations
+  user              User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  child             ChildProfile?       @relation(fields: [childId], references: [id], onDelete: SetNull)
+
+  @@index([eventType])
+  @@index([userId])
+  @@index([childId])
+  @@index([timestamp])
+  @@map("security_logs")
+}
+
+model SocialAuthProvider {
+  id                    String    @id @default(cuid())
+  userId                String
+  provider              String    // 'google', 'apple', 'instagram'
+  providerUserId        String
+  providerEmail         String?
+  providerName          String?
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String?
+  tokenExpiresAt        DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@map("social_auth_providers")
+}
+
+model UserSettings {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  theme                 String    @default("light") // 'light', 'dark', 'auto'
+  language              String    @default("en")
+  timezone              String    @default("UTC")
+  emailNotifications    Boolean   @default(true)
+  pushNotifications     Boolean   @default(true)
+  privacyLevel          String    @default("standard") // 'minimal', 'standard', 'full'
+  dataSharingConsent    Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model ChildSettings {
+  id                    String        @id @default(cuid())
+  childId               String        @unique
+  contentFilterLevel    String        @default("moderate") // 'strict', 'moderate', 'relaxed'
+  sessionTimeLimit      Int           @default(60) // minutes
+  breakReminders        Boolean       @default(true)
+  parentalNotifications Boolean       @default(true)
+  aiAssistanceEnabled   Boolean       @default(true)
+  videoAutoplay         Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  // Relations
+  child                 ChildProfile  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@map("child_settings")
+}
+
+model StudyContent {
+  id                    String              @id @default(cuid())
+  activityId            String
+  contentType           String              // 'video', 'article', 'interactive'
+  title                 String
+  description           String?
+  contentUrl            String?
+  thumbnailUrl          String?
+  duration              Int?                // seconds for videos, estimated reading time for articles
+  difficultyLevel       Int                 @default(1) // 1-10
+  ageAppropriateMin     Int                 @default(5)
+  ageAppropriateMax     Int                 @default(18)
+  safetyRating          String              @default("safe") // 'safe', 'review_needed', 'blocked'
+  sourceAttribution     String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  activity              StudyActivity       @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  contentInteractions   ContentInteraction[]
+
+  @@map("study_content")
+}
+
+model ContentInteraction {
+  id                    String        @id @default(cuid())
+  childId               String
+  contentId             String
+  interactionType       String        // 'view', 'complete', 'like', 'bookmark'
+  progressPercentage    Int           @default(0)
+  timeSpent             Int           @default(0) // seconds
+  createdAt             DateTime      @default(now())
+
+  // Relations
+  child                 ChildProfile  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  content               StudyContent  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, contentId, interactionType])
+  @@map("content_interactions")
+}
+
+model ParentalApprovalRequest {
+  id                    String                      @id @default(cuid())
+  childId               String
+  studyPlanId           String
+  contentType           ParentalApprovalContentType
+  contentData           String                      // JSON string
+  safetyResults         String                      // JSON string
+  requestedAt           DateTime                    @default(now())
+  processedAt           DateTime?
+  status                ParentalApprovalStatus      @default(PENDING)
+  parentNotes           String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+
+  // Relations
+  child                 ChildProfile                @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("parental_approval_requests")
+}
+
+enum ParentalApprovalContentType {
+  STUDY_PLAN
+  CONTENT_RECOMMENDATION
+}
+
+enum ParentalApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model RateLimitEntry {
+  id                    String    @id @default(cuid())
+  key                   String
+  createdAt             DateTime  @default(now())
+
+  @@index([key])
+  @@index([createdAt])
+  @@map("rate_limit_entries")
+}
+
+// Master Data Models
+model GradeLevel {
+  id                    String              @id @default(cuid())
+  grade                 String              @unique // "K", "1", "2", ..., "12"
+  displayName           String              // "Kindergarten", "1st Grade", etc.
+  ageMin                Int                 // Minimum typical age
+  ageMax                Int                 // Maximum typical age
+  ageTypical            Int                 // Most common age
+  educationalLevel      EducationalLevel
+  prerequisites         Json                @default("[]") // Array of prerequisite grade IDs
+  nextGrade             String?             // Next grade level
+  isActive              Boolean             @default(true)
+  sortOrder             Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  subjects              GradeSubject[]
+  topics                Topic[]
+
+  @@index([grade])
+  @@index([educationalLevel])
+  @@index([sortOrder])
+  @@map("grade_levels")
+}
+
+model Subject {
+  id                    String              @id @default(cuid())
+  name                  String              @unique // "mathematics", "english", "science"
+  displayName           String              // "Mathematics", "English Language Arts"
+  description           String?
+  icon                  String              // Material-UI icon name
+  color                 String              // Hex color code
+  category              SubjectCategory
+  isCore                Boolean             @default(true)
+  sortOrder             Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  gradeSubjects         GradeSubject[]
+  topics                Topic[]
+
+  @@index([category])
+  @@index([isCore])
+  @@index([sortOrder])
+  @@map("subjects")
+}
+
+model GradeSubject {
+  id                    String              @id @default(cuid())
+  gradeId               String
+  subjectId             String
+  estimatedHours        Int                 @default(0) // Total hours for this subject in this grade
+  prerequisites         Json                @default("[]") // Array of prerequisite subject IDs
+  isRequired            Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  grade                 GradeLevel          @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  subject               Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([gradeId, subjectId])
+  @@map("grade_subjects")
+}
+
+model Topic {
+  id                    String              @id @default(cuid())
+  name                  String              // "basic-addition", "fractions-decimals"
+  displayName           String              // "Basic Addition", "Fractions & Decimals"
+  description           String?
+  gradeId               String
+  subjectId             String
+  difficulty            DifficultyLevel     @default(BEGINNER)
+  estimatedHours        Int                 @default(1)
+  prerequisites         Json                @default("[]") // Array of prerequisite topic IDs
+  learningObjectives    Json                @default("[]") // Array of learning objectives
+  skills                Json                @default("[]") // Array of skills developed
+  assessmentCriteria    Json                @default("[]") // Array of assessment criteria
+  sortOrder             Int                 @default(0)
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  grade                 GradeLevel          @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  subject               Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  resources             TopicResource[]
+
+  @@unique([gradeId, subjectId, name])
+  @@index([gradeId, subjectId])
+  @@index([difficulty])
+  @@index([sortOrder])
+  @@map("topics")
+}
+
+model TopicResource {
+  id                    String              @id @default(cuid())
+  topicId               String
+  type                  ResourceType
+  title                 String
+  description           String?
+  url                   String
+  thumbnailUrl          String?
+  duration              Int?                // Duration in minutes for videos, estimated reading time for articles
+  difficulty            DifficultyLevel     @default(BEGINNER)
+  ageAppropriate        Boolean             @default(true)
+  safetyRating          SafetyRating        @default(SAFE)
+  source                String              // "Khan Academy", "YouTube", "Educational Website"
+  tags                  Json                @default("[]") // Array of tags
+  metadata              Json                @default("{}") // Additional metadata (videoId, author, etc.)
+  lastValidated         DateTime            @default(now())
+  validationStatus      ValidationStatus    @default(PENDING)
+  isActive              Boolean             @default(true)
+  sortOrder             Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  topic                 Topic               @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  usage                 ResourceUsage[]
+
+  @@index([topicId])
+  @@index([type])
+  @@index([safetyRating])
+  @@index([validationStatus])
+  @@map("topic_resources")
+}
+
+// Master Data Enums
+enum EducationalLevel {
+  ELEMENTARY
+  MIDDLE
+  HIGH
+}
+
+enum SubjectCategory {
+  CORE_ACADEMIC
+  STEM
+  LANGUAGE_ARTS
+  SOCIAL_STUDIES
+  ARTS
+  PHYSICAL_EDUCATION
+  LIFE_SKILLS
+  ELECTIVE
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  MASTERY
+}
+
+enum ResourceType {
+  VIDEO
+  ARTICLE
+  INTERACTIVE
+  WORKSHEET
+  GAME
+  BOOK
+  EXTERNAL_LINK
+}
+
+enum SafetyRating {
+  SAFE
+  REVIEW_NEEDED
+  RESTRICTED
+  BLOCKED
+}
+
+enum ValidationStatus {
+  PENDING
+  VALIDATED
+  NEEDS_UPDATE
+  BROKEN
+  REMOVED
+}
+
+enum StreakType {
+  DAILY
+  WEEKLY
+  ACTIVITY_COMPLETION
+  PERFECT_SCORE
+  HELP_FREE
+}
+
+// Resource Usage Tracking
+model ResourceUsage {
+  id         String   @id @default(cuid())
+  childId    String
+  resourceId String
+  action     String   // 'view', 'complete', 'bookmark', 'share'
+  duration   Int?     // Duration in minutes
+  timestamp  DateTime @default(now())
+
+  // Relations
+  child    ChildProfile  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  resource TopicResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@map("resource_usage")
+  @@index([childId, timestamp])
+  @@index([resourceId, timestamp])
+}
+
+// Child Progress Tracking Models
+model ChildLoginSession {
+  id                    String              @id @default(cuid())
+  childId               String
+  loginTime             DateTime            @default(now())
+  logoutTime            DateTime?
+  deviceInfo            Json                @default("{}") // Device information (userAgent, platform, etc.)
+  ipAddress             String?
+  sessionDuration       Int?                // Duration in seconds
+  activitiesCompleted   Int                 @default(0)
+  badgesEarned          Int                 @default(0)
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  child                 ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@index([loginTime])
+  @@index([isActive])
+  @@map("child_login_sessions")
+}
+
+model LearningStreak {
+  id                    String              @id @default(cuid())
+  childId               String
+  streakType            StreakType
+  currentCount          Int                 @default(0)
+  longestCount          Int                 @default(0)
+  lastActivityDate      DateTime?
+  streakStartDate       DateTime?
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  child                 ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, streakType])
+  @@index([childId])
+  @@index([streakType])
+  @@index([isActive])
+  @@map("learning_streaks")
+}

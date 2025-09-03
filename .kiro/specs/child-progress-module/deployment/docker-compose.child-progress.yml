@@ -1,0 +1,331 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ../../../backend
+      dockerfile: Dockerfile
+    environment:
+      # Core Settings
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-2h}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+      
+      # Child-specific JWT settings
+      - CHILD_JWT_EXPIRES_IN=${CHILD_JWT_EXPIRES_IN:-20m}
+      - CHILD_SESSION_TIMEOUT=${CHILD_SESSION_TIMEOUT:-1200000}
+      - CHILD_MAX_FAILED_LOGINS=${CHILD_MAX_FAILED_LOGINS:-3}
+      - CHILD_LOCKOUT_DURATION=${CHILD_LOCKOUT_DURATION:-900000}
+      
+      # Child Progress Module Features
+      - FEATURE_CHILD_PROGRESS_MODULE=${FEATURE_CHILD_PROGRESS_MODULE:-true}
+      - FEATURE_ENHANCED_CHILD_AUTH=${FEATURE_ENHANCED_CHILD_AUTH:-true}
+      - FEATURE_BADGE_SYSTEM=${FEATURE_BADGE_SYSTEM:-true}
+      - FEATURE_LEARNING_STREAKS=${FEATURE_LEARNING_STREAKS:-true}
+      - FEATURE_REAL_TIME_PROGRESS=${FEATURE_REAL_TIME_PROGRESS:-true}
+      - FEATURE_CHILD_ANALYTICS=${FEATURE_CHILD_ANALYTICS:-true}
+      - FEATURE_PARENTAL_MONITORING=${FEATURE_PARENTAL_MONITORING:-true}
+      
+      # Badge System Configuration
+      - BADGE_PROCESSING_ENABLED=${BADGE_PROCESSING_ENABLED:-true}
+      - BADGE_PROCESSING_INTERVAL=${BADGE_PROCESSING_INTERVAL:-60000}
+      - BADGE_CACHE_TTL=${BADGE_CACHE_TTL:-300}
+      - BADGE_CELEBRATION_ENABLED=${BADGE_CELEBRATION_ENABLED:-true}
+      - BADGE_SOUND_ENABLED=${BADGE_SOUND_ENABLED:-true}
+      
+      # Progress Tracking Settings
+      - PROGRESS_SYNC_ENABLED=${PROGRESS_SYNC_ENABLED:-true}
+      - PROGRESS_SYNC_INTERVAL=${PROGRESS_SYNC_INTERVAL:-30000}
+      - PROGRESS_BATCH_SIZE=${PROGRESS_BATCH_SIZE:-100}
+      - PROGRESS_RETENTION_DAYS=${PROGRESS_RETENTION_DAYS:-365}
+      
+      # Learning Streak Configuration
+      - STREAK_CALCULATION_ENABLED=${STREAK_CALCULATION_ENABLED:-true}
+      - STREAK_TIMEZONE=${STREAK_TIMEZONE:-America/New_York}
+      - STREAK_GRACE_PERIOD_HOURS=${STREAK_GRACE_PERIOD_HOURS:-6}
+      - STREAK_MAX_TYPES=${STREAK_MAX_TYPES:-5}
+      
+      # Child Authentication Settings
+      - CHILD_AUTH_ENABLED=${CHILD_AUTH_ENABLED:-true}
+      - CHILD_PIN_MIN_LENGTH=${CHILD_PIN_MIN_LENGTH:-4}
+      - CHILD_PIN_MAX_LENGTH=${CHILD_PIN_MAX_LENGTH:-6}
+      - CHILD_DEVICE_TRACKING=${CHILD_DEVICE_TRACKING:-true}
+      - CHILD_IP_LOGGING=${CHILD_IP_LOGGING:-true}
+      
+      # Parental Monitoring Settings
+      - PARENTAL_NOTIFICATIONS_ENABLED=${PARENTAL_NOTIFICATIONS_ENABLED:-true}
+      - PARENTAL_EMAIL_NOTIFICATIONS=${PARENTAL_EMAIL_NOTIFICATIONS:-true}
+      - PARENTAL_SMS_NOTIFICATIONS=${PARENTAL_SMS_NOTIFICATIONS:-false}
+      - SECURITY_ALERT_THRESHOLD=${SECURITY_ALERT_THRESHOLD:-3}
+      - SUSPICIOUS_ACTIVITY_DETECTION=${SUSPICIOUS_ACTIVITY_DETECTION:-true}
+      
+      # Real-time Features
+      - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
+      - WEBSOCKET_PORT=${WEBSOCKET_PORT:-3002}
+      - REAL_TIME_PROGRESS_ENABLED=${REAL_TIME_PROGRESS_ENABLED:-true}
+      - REAL_TIME_BADGE_NOTIFICATIONS=${REAL_TIME_BADGE_NOTIFICATIONS:-true}
+      
+      # Performance Settings
+      - CHILD_PROGRESS_CACHE_ENABLED=${CHILD_PROGRESS_CACHE_ENABLED:-true}
+      - CHILD_PROGRESS_CACHE_TTL=${CHILD_PROGRESS_CACHE_TTL:-300}
+      - BADGE_ELIGIBILITY_CACHE_TTL=${BADGE_ELIGIBILITY_CACHE_TTL:-180}
+      - ANALYTICS_CACHE_TTL=${ANALYTICS_CACHE_TTL:-600}
+      
+      # Rate Limiting
+      - CHILD_RATE_LIMIT_ENABLED=${CHILD_RATE_LIMIT_ENABLED:-true}
+      - CHILD_AUTH_RATE_LIMIT=${CHILD_AUTH_RATE_LIMIT:-5}
+      - CHILD_PROGRESS_RATE_LIMIT=${CHILD_PROGRESS_RATE_LIMIT:-60}
+      - CHILD_DASHBOARD_RATE_LIMIT=${CHILD_DASHBOARD_RATE_LIMIT:-30}
+      - CHILD_BADGE_RATE_LIMIT=${CHILD_BADGE_RATE_LIMIT:-20}
+      
+      # External Services
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@ai-study-planner.com}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      
+      # Logging Configuration
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE_ENABLED=${LOG_FILE_ENABLED:-true}
+      - LOG_FILE_PATH=${LOG_FILE_PATH:-/app/logs}
+      
+    ports:
+      - "3001:3001"
+      - "3002:3002"  # WebSocket port
+    
+    volumes:
+      - backend_logs:/app/logs
+      - backend_uploads:/app/uploads
+      - ./backend/prisma:/app/prisma
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    restart: unless-stopped
+    
+    networks:
+      - child-progress-network
+
+  frontend:
+    build:
+      context: ../../../frontend
+      dockerfile: Dockerfile
+    environment:
+      # Core Settings
+      - NODE_ENV=${NODE_ENV:-production}
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:3001}
+      
+      # Child Progress Module Frontend Settings
+      - REACT_APP_CHILD_PROGRESS_ENABLED=${REACT_APP_CHILD_PROGRESS_ENABLED:-true}
+      - REACT_APP_BADGE_CELEBRATIONS_ENABLED=${REACT_APP_BADGE_CELEBRATIONS_ENABLED:-true}
+      - REACT_APP_REAL_TIME_PROGRESS_ENABLED=${REACT_APP_REAL_TIME_PROGRESS_ENABLED:-true}
+      - REACT_APP_WEBSOCKET_URL=${REACT_APP_WEBSOCKET_URL:-ws://localhost:3002}
+      
+      # Child Authentication Settings
+      - REACT_APP_CHILD_AUTH_ENABLED=${REACT_APP_CHILD_AUTH_ENABLED:-true}
+      - REACT_APP_CHILD_SESSION_TIMEOUT=${REACT_APP_CHILD_SESSION_TIMEOUT:-1200000}
+      
+      # Badge System Settings
+      - REACT_APP_BADGE_ANIMATIONS_ENABLED=${REACT_APP_BADGE_ANIMATIONS_ENABLED:-true}
+      - REACT_APP_BADGE_SOUNDS_ENABLED=${REACT_APP_BADGE_SOUNDS_ENABLED:-true}
+      
+      # Analytics Settings
+      - REACT_APP_CHILD_ANALYTICS_ENABLED=${REACT_APP_CHILD_ANALYTICS_ENABLED:-true}
+      - REACT_APP_REAL_TIME_ANALYTICS=${REACT_APP_REAL_TIME_ANALYTICS:-true}
+      
+      # Performance Settings
+      - REACT_APP_LAZY_LOADING_ENABLED=${REACT_APP_LAZY_LOADING_ENABLED:-true}
+      - REACT_APP_CACHE_ENABLED=${REACT_APP_CACHE_ENABLED:-true}
+      
+    ports:
+      - "3000:3000"
+    
+    depends_on:
+      backend:
+        condition: service_healthy
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    restart: unless-stopped
+    
+    networks:
+      - child-progress-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-ai_study_planner}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/scripts:/docker-entrypoint-initdb.d
+      - postgres_backups:/backups
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_study_planner}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    restart: unless-stopped
+    
+    networks:
+      - child-progress-network
+    
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+
+  redis:
+    image: redis:7-alpine
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    
+    ports:
+      - "6379:6379"
+    
+    volumes:
+      - redis_data:/data
+      - ./deployment/redis.conf:/usr/local/etc/redis/redis.conf
+    
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD}
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    restart: unless-stopped
+    
+    networks:
+      - child-progress-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - nginx_logs:/var/log/nginx
+      - ssl_certs:/etc/nginx/ssl
+    
+    depends_on:
+      - frontend
+      - backend
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    restart: unless-stopped
+    
+    networks:
+      - child-progress-network
+
+  # Monitoring and observability
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    
+    networks:
+      - child-progress-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    
+    networks:
+      - child-progress-network
+
+volumes:
+  postgres_data:
+    driver: local
+  postgres_backups:
+    driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+  backend_uploads:
+    driver: local
+  nginx_logs:
+    driver: local
+  ssl_certs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  child-progress-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

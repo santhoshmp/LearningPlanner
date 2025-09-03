@@ -1,0 +1,45 @@
+name: 'Responsive Testing'
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  responsive-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Run responsive tests
+        run: npm run test:responsive:ci
+        working-directory: ./frontend
+
+      - name: Upload responsive test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: responsive-test-results
+          path: frontend/responsive-test-results/
+          retention-days: 30
+          
+      - name: Upload Cypress videos
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: cypress-videos
+          path: frontend/cypress/videos/
+          retention-days: 7

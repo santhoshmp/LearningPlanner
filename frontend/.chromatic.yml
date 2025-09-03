@@ -1,0 +1,16 @@
+# .chromatic.yml
+
+# Optional: Specify a custom build command
+# buildScriptName: "build-storybook"
+
+# Don't allow builds to fail the CI process
+exitZeroOnChanges: true
+
+# Optional: Specify a custom directory for your Storybook build output
+# storybookBuildDir: "storybook-static"
+
+# Optional: Add GitHub PR comments
+addGitHubAppToken: true
+
+# Optional: Specify a custom Storybook URL
+# storybookUrl: "https://your-storybook-url.com"

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Child Login Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, button { padding: 10px; width: 100%; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Study Planner - Child Login Test</h1>
+        
+        <form id="childLoginForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" value="testchild" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="pin">PIN:</label>
+                <input type="password" id="pin" value="1234" maxlength="4" required>
+            </div>
+            
+            <button type="submit">Login as Child</button>
+        </form>
+        
+        <div id="result"></div>
+        
+        <div class="info" style="margin-top: 30px;">
+            <h3>Available Test Children:</h3>
+            <ul>
+                <li><strong>testchild</strong> - PIN: 1234 (Test Child, Age 8)</li>
+                <li><strong>john</strong> - PIN: 1234 (John, Age 14)</li>
+                <li><strong>tim</strong> - PIN: 1234 (Tim, Age 11)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        
+        document.getElementById('childLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const pin = document.getElementById('pin').value;
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.innerHTML = '<div class="info">Attempting child login...</div>';
+            
+            try {
+                // Try the enhanced endpoint first
+                const loginData = {
+                    credentials: {
+                        username: username,
+                        pin: pin
+                    },
+                    deviceInfo: {
+                        userAgent: navigator.userAgent,
+                        platform: navigator.platform,
+                        isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+                        screenResolution: `${screen.width}x${screen.height}`,
+                        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                        language: navigator.language
+                    },
+                    ipAddress: '127.0.0.1'
+                };
+                
+                const response = await fetch(`${API_BASE}/auth/child/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(loginData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>✅ Child Login Successful!</h3>
+                            <p><strong>Child:</strong> ${data.child.name}</p>
+                            <p><strong>ID:</strong> ${data.child.id}</p>
+                            <p><strong>Token:</strong> ${data.accessToken ? 'Received' : 'Not received'}</p>
+                        </div>
+                    `;
+                    
+                    // Test child dashboard access
+                    if (data.accessToken) {
+                        testChildDashboard(data.child.id, data.accessToken);
+                    }
+                } else {
+                    throw new Error(data.error?.message || 'Login failed');
+                }
+                
+            } catch (error) {
+                console.error('Enhanced login failed:', error);
+                
+                // Try legacy endpoint
+                try {
+                    const legacyResponse = await fetch(`${API_BASE}/auth/child/login-legacy`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ username, pin })
+                    });
+                    
+                    const legacyData = await legacyResponse.json();
+                    
+                    if (legacyResponse.ok) {
+                        resultDiv.innerHTML = `
+                            <div class="success">
+                                <h3>✅ Child Login Successful (Legacy)!</h3>
+                                <p><strong>Child:</strong> ${legacyData.child.name}</p>
+                                <p><strong>ID:</strong> ${legacyData.child.id}</p>
+                                <p><strong>Token:</strong> ${legacyData.accessToken ? 'Received' : 'Not received'}</p>
+                            </div>
+                        `;
+                        
+                        if (legacyData.accessToken) {
+                            testChildDashboard(legacyData.child.id, legacyData.accessToken);
+                        }
+                    } else {
+                        throw new Error(legacyData.error?.message || 'Legacy login failed');
+                    }
+                    
+                } catch (legacyError) {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h3>❌ Child Login Failed</h3>
+                            <p><strong>Enhanced Error:</strong> ${error.message}</p>
+                            <p><strong>Legacy Error:</strong> ${legacyError.message}</p>
+                            <p>Please check the backend server logs for more details.</p>
+                        </div>
+                    `;
+                }
+            }
+        });
+        
+        async function testChildDashboard(childId, token) {
+            try {
+                const response = await fetch(`${API_BASE}/child/${childId}/dashboard`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('result').innerHTML += `
+                        <div class="success" style="margin-top: 10px;">
+                            <h4>✅ Child Dashboard Access Successful!</h4>
+                            <p>Dashboard data loaded successfully</p>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.error?.message || 'Dashboard access failed');
+                }
+                
+            } catch (error) {
+                document.getElementById('result').innerHTML += `
+                    <div class="error" style="margin-top: 10px;">
+                        <h4>❌ Child Dashboard Access Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
