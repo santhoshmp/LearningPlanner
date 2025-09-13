@@ -123,6 +123,305 @@ describe('Child Authentication End-to-End Tests', () => {
     });
   });
   
+  describe('SimpleChildLoginForm Component Tests', () => {
+    it('should handle successful login with proper session management', () => {
+      // Mock the child login API endpoint
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 200,
+        body: {
+          token: 'mock-jwt-token',
+          user: { id: 'child-1', username: testChild.username, role: 'CHILD' }
+        }
+      }).as('childLogin');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call
+      cy.wait('@childLogin');
+
+      // Verify navigation to dashboard
+      cy.url().should('include', '/child-dashboard');
+      
+      // Verify session was properly created and stored
+      cy.window().then((win) => {
+        const session = win.sessionStorage.getItem('childSession');
+        expect(session).to.not.be.null;
+        
+        if (session) {
+          const sessionData = JSON.parse(session);
+          expect(sessionData.token).to.equal('mock-jwt-token');
+          expect(sessionData.user.role).to.equal('CHILD');
+        }
+      });
+    });
+
+    it('should clear existing session before new login', () => {
+      // Set up existing session data
+      cy.window().then((win) => {
+        win.sessionStorage.setItem('childSession', JSON.stringify({
+          token: 'old-token',
+          user: { id: 'old-child', role: 'CHILD' }
+        }));
+        // Also set localStorage data that should be cleaned
+        win.localStorage.setItem('accessToken', 'old-access-token');
+        win.localStorage.setItem('refreshToken', 'old-refresh-token');
+        win.localStorage.setItem('user', JSON.stringify({ id: 'old-child', role: 'CHILD' }));
+        win.localStorage.setItem('userRole', 'child');
+      });
+
+      // Mock successful API response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 200,
+        body: {
+          token: 'new-jwt-token',
+          user: { id: 'child-2', username: testChild.username, role: 'CHILD' }
+        }
+      }).as('childLogin');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call
+      cy.wait('@childLogin');
+
+      // Verify new session was created (old session cleared)
+      cy.window().then((win) => {
+        const session = JSON.parse(win.sessionStorage.getItem('childSession') || '{}');
+        expect(session.token).to.equal('new-jwt-token');
+        expect(session.user.id).to.equal('child-2');
+        
+        // Verify localStorage was cleaned and new data set
+        expect(win.localStorage.getItem('accessToken')).to.not.equal('old-access-token');
+        expect(win.localStorage.getItem('refreshToken')).to.not.equal('old-refresh-token');
+      });
+    });
+
+    it('should always clean session data before login attempt regardless of corruption', () => {
+      // Set up potentially corrupted session data
+      cy.window().then((win) => {
+        win.localStorage.setItem('accessToken', 'potentially-corrupted-token');
+        win.localStorage.setItem('refreshToken', 'potentially-corrupted-refresh');
+        win.localStorage.setItem('user', 'invalid-json{');
+        win.localStorage.setItem('userRole', 'child');
+        win.localStorage.setItem('sessionId', 'old-session-id');
+      });
+
+      // Mock successful API response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 200,
+        body: {
+          token: 'clean-jwt-token',
+          user: { id: 'child-clean', username: testChild.username, role: 'CHILD' }
+        }
+      }).as('childLogin');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call
+      cy.wait('@childLogin');
+
+      // Verify session cleanup occurred and new clean session was created
+      cy.window().then((win) => {
+        // Old corrupted data should be gone
+        expect(win.localStorage.getItem('accessToken')).to.not.equal('potentially-corrupted-token');
+        expect(win.localStorage.getItem('refreshToken')).to.not.equal('potentially-corrupted-refresh');
+        
+        // New clean session should be present
+        const userStr = win.localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          expect(user.id).to.equal('child-clean');
+        }
+      });
+    });
+
+    it('should clean session data even when login fails', () => {
+      // Set up existing session data
+      cy.window().then((win) => {
+        win.localStorage.setItem('accessToken', 'existing-token');
+        win.localStorage.setItem('refreshToken', 'existing-refresh');
+        win.localStorage.setItem('user', JSON.stringify({ id: 'existing-child', role: 'CHILD' }));
+        win.localStorage.setItem('userRole', 'child');
+      });
+
+      // Mock failed API response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 401,
+        body: { error: 'Invalid credentials' }
+      }).as('childLoginError');
+
+      // Fill in the form with invalid credentials
+      cy.get('input[name="username"]').type('wronguser');
+      cy.get('input[name="pin"]').type('0000');
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call to fail
+      cy.wait('@childLoginError');
+
+      // Verify error message is displayed
+      cy.contains('Invalid username or PIN').should('be.visible');
+      
+      // Verify session data was still cleaned even though login failed
+      cy.window().then((win) => {
+        // The session cleanup should have occurred before the login attempt
+        // So even though login failed, the old session data should be gone
+        expect(win.localStorage.getItem('accessToken')).to.not.equal('existing-token');
+        expect(win.localStorage.getItem('refreshToken')).to.not.equal('existing-refresh');
+      });
+    });
+
+    it('should handle 401 authentication errors', () => {
+      // Mock 401 error response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 401,
+        body: { error: 'Invalid credentials' }
+      }).as('childLoginError');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type('wronguser');
+      cy.get('input[name="pin"]').type('0000');
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call to fail
+      cy.wait('@childLoginError');
+
+      // Verify error message is displayed
+      cy.contains('Invalid username or PIN').should('be.visible');
+      
+      // Verify no navigation occurred
+      cy.url().should('include', '/child-login');
+      
+      // Verify no session was created
+      cy.window().then((win) => {
+        const session = win.sessionStorage.getItem('childSession');
+        expect(session).to.be.null;
+      });
+    });
+
+    it('should handle rate limiting (429) errors', () => {
+      // Mock 429 error response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 429,
+        body: { error: 'Too many attempts' }
+      }).as('childLoginRateLimit');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call to fail
+      cy.wait('@childLoginRateLimit');
+
+      // Verify rate limit error message is displayed
+      cy.contains('Too many attempts').should('be.visible');
+      
+      // Verify no navigation occurred
+      cy.url().should('include', '/child-login');
+    });
+
+    it('should handle offline/network errors', () => {
+      // Mock network error
+      cy.intercept('POST', '/api/auth/child/login', {
+        forceNetworkError: true
+      }).as('childLoginNetworkError');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call to fail
+      cy.wait('@childLoginNetworkError');
+
+      // Verify network error message is displayed
+      cy.contains('No internet connection').should('be.visible');
+      
+      // Verify no navigation occurred
+      cy.url().should('include', '/child-login');
+    });
+
+    it('should show loading state during login', () => {
+      // Mock slow API response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 200,
+        body: {
+          token: 'mock-jwt-token',
+          user: { id: 'child-1', username: testChild.username, role: 'CHILD' }
+        },
+        delay: 2000
+      }).as('childLoginSlow');
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Verify loading state
+      cy.get('button[type="submit"]').should('be.disabled');
+      
+      // Wait for completion
+      cy.wait('@childLoginSlow');
+      
+      // Verify loading state is cleared and navigation occurred
+      cy.url().should('include', '/child-dashboard');
+    });
+
+    it('should log appropriate console messages', () => {
+      // Mock successful API response
+      cy.intercept('POST', '/api/auth/child/login', {
+        statusCode: 200,
+        body: {
+          token: 'mock-jwt-token',
+          user: { id: 'child-1', username: testChild.username, role: 'CHILD' }
+        }
+      }).as('childLogin');
+
+      // Set up console log spy
+      cy.window().then((win) => {
+        cy.spy(win.console, 'log').as('consoleLog');
+      });
+
+      // Fill in the form
+      cy.get('input[name="username"]').type(testChild.username);
+      cy.get('input[name="pin"]').type(testChild.pin);
+      
+      // Submit the form
+      cy.get('button[type="submit"]').click();
+
+      // Wait for API call
+      cy.wait('@childLogin');
+
+      // Verify console logs
+      cy.get('@consoleLog').should('have.been.calledWith', 'Attempting child login with:', { username: testChild.username });
+      cy.get('@consoleLog').should('have.been.calledWith', 'Login successful:', Cypress.sinon.match.object);
+    });
+  });
+
   describe('Complete Child Authentication Flow', () => {
     it('should complete full login flow and access dashboard', () => {
       // Fill in valid credentials

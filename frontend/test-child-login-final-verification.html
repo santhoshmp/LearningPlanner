@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Child Login Final Verification</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Child Login Final Verification</h1>
+    <div id="status" class="status info">Ready to test...</div>
+    
+    <button onclick="clearAndTest()">Clear Storage & Test Login</button>
+    <button onclick="testWithCorruptedData()">Test with Corrupted Data</button>
+    <button onclick="checkBackendHealth()">Check Backend Health</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+        }
+        
+        function addResult(title, content, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `status ${type}`;
+            resultDiv.innerHTML = `<h3>${title}</h3><pre>${content}</pre>`;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        async function checkBackendHealth() {
+            try {
+                updateStatus('Checking backend health...', 'info');
+                
+                const response = await fetch('http://localhost:3001/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult('Backend Health Check', JSON.stringify(data, null, 2), 'success');
+                    updateStatus('Backend is healthy!', 'success');
+                } else {
+                    addResult('Backend Health Check Failed', `Status: ${response.status}`, 'error');
+                    updateStatus('Backend health check failed', 'error');
+                }
+            } catch (error) {
+                addResult('Backend Health Check Error', error.message, 'error');
+                updateStatus('Backend is not accessible', 'error');
+            }
+        }
+        
+        async function clearAndTest() {
+            try {
+                updateStatus('Clearing localStorage and testing login...', 'info');
+                
+                // Clear all localStorage
+                localStorage.clear();
+                addResult('Storage Cleared', 'All localStorage data cleared', 'success');
+                
+                // Test the login API
+                const response = await fetch('http://localhost:3001/api/auth/child/login-legacy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'testchild',
+                        pin: '1234'
+                    })
+                });
+                
+                const responseText = await response.text();
+                
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    addResult('Login Success', JSON.stringify({
+                        message: data.message,
+                        childName: data.child?.name,
+                        childId: data.child?.id,
+                        hasAccessToken: !!data.accessToken,
+                        hasRefreshToken: !!data.refreshToken,
+                        sessionId: data.sessionId
+                    }, null, 2), 'success');
+                    updateStatus('✅ Child login successful!', 'success');
+                } else {
+                    addResult('Login Failed', `Status: ${response.status}\nResponse: ${responseText}`, 'error');
+                    updateStatus('❌ Child login failed', 'error');
+                }
+            } catch (error) {
+                addResult('Test Error', error.message, 'error');
+                updateStatus('❌ Test failed with error', 'error');
+            }
+        }
+        
+        async function testWithCorruptedData() {
+            try {
+                updateStatus('Testing with corrupted localStorage data...', 'info');
+                
+                // Add corrupted data to localStorage
+                localStorage.setItem('accessToken', 'corrupted_token_123');
+                localStorage.setItem('refreshToken', 'corrupted_refresh_456');
+                localStorage.setItem('user', 'invalid_json_data');
+                localStorage.setItem('userRole', 'invalid_role');
+                
+                addResult('Corrupted Data Added', 'Added invalid tokens and user data to localStorage', 'info');
+                
+                // Test the login API with corrupted data present
+                const response = await fetch('http://localhost:3001/api/auth/child/login-legacy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'testchild',
+                        pin: '1234'
+                    })
+                });
+                
+                const responseText = await response.text();
+                
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    addResult('Login with Corrupted Data - Success', JSON.stringify({
+                        message: data.message,
+                        childName: data.child?.name,
+                        hasAccessToken: !!data.accessToken,
+                        hasRefreshToken: !!data.refreshToken
+                    }, null, 2), 'success');
+                    updateStatus('✅ Login successful even with corrupted data!', 'success');
+                } else {
+                    addResult('Login with Corrupted Data - Failed', `Status: ${response.status}\nResponse: ${responseText}`, 'error');
+                    updateStatus('❌ Login failed with corrupted data', 'error');
+                }
+            } catch (error) {
+                addResult('Corrupted Data Test Error', error.message, 'error');
+                updateStatus('❌ Corrupted data test failed', 'error');
+            }
+        }
+        
+        // Auto-run backend health check on load
+        window.onload = () => {
+            checkBackendHealth();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Session Corruption</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+        .code { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; white-space: pre-wrap; border: 1px solid #e9ecef; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Session Corruption Debug Tool</h1>
+        <p>This tool helps debug the session corruption issue that's causing child login to fail.</p>
+        
+        <div class="status error">
+            <strong>Issue:</strong> After successful child login, session corruption is detected and session is cleared.
+        </div>
+        
+        <button class="button" onclick="clearAll()">🧹 Clear All</button>
+        <button class="button" onclick="testChildLogin()">1. Test Child Login</button>
+        <button class="button" onclick="checkCorruption()">2. Check Corruption</button>
+        <button class="button" onclick="simulateCorruption()">3. Simulate Corruption</button>
+        <button class="button" onclick="monitorStorage()">4. Monitor Storage</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        let storageMonitor = null;
+        
+        function updateResults(type, title, content) {
+            const resultsDiv = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            resultsDiv.innerHTML += '<div class="container"><h3>' + title + ' [' + timestamp + ']</h3><div class="status ' + type + '">' + content + '</div></div>';
+        }
+        
+        function clearAll() {
+            localStorage.clear();
+            document.getElementById('results').innerHTML = '';
+            updateResults('success', 'Clear All', '🧹 All data cleared!');
+        }
+        
+        async function testChildLogin() {
+            try {
+                updateResults('info', '1. Child Login Test', 'Attempting child login and monitoring session...');
+                
+                // Clear first
+                localStorage.clear();
+                
+                const response = await fetch(API_BASE + '/auth/child-login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'testchild',
+                        pin: '1234'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Manually save session like SessionManager would
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.setItem('userRole', 'child');
+                    localStorage.setItem('loginTime', new Date().toISOString());
+                    
+                    updateResults('success', '1. Child Login Test', 
+                        '✅ Login successful and session saved!<br>' +
+                        '<strong>User ID:</strong> ' + data.user.id + '<br>' +
+                        '<strong>Username:</strong> ' + data.user.username + '<br>' +
+                        '<strong>Role:</strong> ' + data.user.role + '<br>' +
+                        '<div class="code">Session Data Saved:<br>' +
+                        'accessToken: ' + (data.accessToken ? 'Present' : 'Missing') + '<br>' +
+                        'refreshToken: ' + (data.refreshToken ? 'Present' : 'Missing') + '<br>' +
+                        'user: ' + JSON.stringify(data.user, null, 2) + '<br>' +
+                        'userRole: child</div>'
+                    );
+                    
+                    // Check for corruption immediately
+                    setTimeout(checkCorruption, 100);
+                } else {
+                    updateResults('error', '1. Child Login Test', 
+                        '❌ Login failed!<br>' +
+                        '<strong>Status:</strong> ' + response.status + '<br>' +
+                        '<div class="code">Error: ' + JSON.stringify(data, null, 2) + '</div>'
+                    );
+                }
+            } catch (error) {
+                updateResults('error', '1. Child Login Test', 
+                    '❌ Network error!<br>' +
+                    '<div class="code">Error: ' + error.message + '</div>'
+                );
+            }
+        }
+        
+        function checkCorruption() {
+            const session = {
+                accessToken: localStorage.getItem('accessToken'),
+                refreshToken: localStorage.getItem('refreshToken'),
+                user: localStorage.getItem('user'),
+                userRole: localStorage.getItem('userRole'),
+                loginTime: localStorage.getItem('loginTime')
+            };
+            
+            const issues = [];
+            
+            // Replicate the detectCorruption logic
+            if (!session.accessToken) issues.push('Missing access token');
+            if (!session.refreshToken) issues.push('Missing refresh token');
+            if (!session.user) issues.push('Missing user data');
+            if (!session.userRole) issues.push('Missing user role');
+            
+            // Check for malformed JSON
+            if (session.user) {
+                try {
+                    const user = JSON.parse(session.user);
+                    if (!user.id) issues.push('Invalid user ID');
+                    if (!user.role) issues.push('Invalid user role');
+                    
+                    // Check role consistency
+                    if (session.userRole === 'child' && user.role !== 'CHILD') {
+                        issues.push('Role inconsistency: child/CHILD mismatch');
+                    }
+                } catch {
+                    issues.push('Corrupted user data JSON');
+                }
+            }
+            
+            const isCorrupted = issues.length > 0;
+            
+            updateResults(
+                isCorrupted ? 'error' : 'success',
+                '2. Corruption Check',
+                '<strong>Corruption Status:</strong> ' + (isCorrupted ? '❌ CORRUPTED' : '✅ CLEAN') + '<br>' +
+                (isCorrupted ? '<strong>Issues Found:</strong> ' + issues.join(', ') + '<br>' : '') +
+                '<div class="code">Current localStorage:<br>' +
+                'accessToken: ' + (session.accessToken ? 'Present (' + session.accessToken.substring(0, 20) + '...)' : 'Missing') + '<br>' +
+                'refreshToken: ' + (session.refreshToken ? 'Present (' + session.refreshToken.substring(0, 20) + '...)' : 'Missing') + '<br>' +
+                'user: ' + (session.user || 'Missing') + '<br>' +
+                'userRole: ' + (session.userRole || 'Missing') + '<br>' +
+                'loginTime: ' + (session.loginTime || 'Missing') + '</div>'
+            );
+        }
+        
+        function simulateCorruption() {
+            // Save a valid session first
+            localStorage.setItem('accessToken', 'test-access-token');
+            localStorage.setItem('refreshToken', 'test-refresh-token');
+            localStorage.setItem('user', JSON.stringify({id: 'test-id', role: 'CHILD', username: 'testchild'}));
+            localStorage.setItem('userRole', 'child');
+            localStorage.setItem('loginTime', new Date().toISOString());
+            
+            updateResults('info', '3. Simulate Corruption', 'Valid session created. Now simulating corruption...');
+            
+            setTimeout(() => {
+                // Remove one key to simulate corruption
+                localStorage.removeItem('accessToken');
+                updateResults('warning', '3. Simulate Corruption', 'Removed accessToken to simulate corruption');
+                
+                setTimeout(checkCorruption, 100);
+            }, 1000);
+        }
+        
+        function monitorStorage() {
+            if (storageMonitor) {
+                clearInterval(storageMonitor);
+                storageMonitor = null;
+                updateResults('info', '4. Storage Monitor', 'Storage monitoring stopped');
+                return;
+            }
+            
+            updateResults('info', '4. Storage Monitor', 'Starting storage monitoring (will check every 500ms)...');
+            
+            let lastState = JSON.stringify({
+                accessToken: localStorage.getItem('accessToken'),
+                refreshToken: localStorage.getItem('refreshToken'),
+                user: localStorage.getItem('user'),
+                userRole: localStorage.getItem('userRole')
+            });
+            
+            storageMonitor = setInterval(() => {
+                const currentState = JSON.stringify({
+                    accessToken: localStorage.getItem('accessToken'),
+                    refreshToken: localStorage.getItem('refreshToken'),
+                    user: localStorage.getItem('user'),
+                    userRole: localStorage.getItem('userRole')
+                });
+                
+                if (currentState !== lastState) {
+                    updateResults('warning', '4. Storage Monitor', 
+                        'Storage change detected!<br>' +
+                        '<div class="code">Previous: ' + lastState + '<br><br>' +
+                        'Current: ' + currentState + '</div>'
+                    );
+                    lastState = currentState;
+                }
+            }, 500);
+        }
+        
+        // Auto-check on load
+        document.addEventListener('DOMContentLoaded', checkCorruption);
+    </script>
+</body>
+</html>

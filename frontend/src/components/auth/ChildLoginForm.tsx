@@ -32,8 +32,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { SessionManager } from '../../utils/sessionManager';
-import { useChildErrorHandler } from '../../hooks/useChildErrorHandler';
-import ChildFriendlyErrorDisplay from '../common/ChildFriendlyErrorDisplay';
+// Removed complex error handling imports
 
 interface DeviceInfo {
   userAgent: string;
@@ -44,19 +43,7 @@ interface DeviceInfo {
   timezone?: string;
 }
 
-interface ChildFriendlyError {
-  title: string;
-  message: string;
-  icon: string;
-  severity: 'info' | 'warning' | 'error' | 'success';
-  recoveryOptions?: Array<{
-    text: string;
-    action: () => void;
-    primary?: boolean;
-  }>;
-  autoHide?: boolean;
-  duration?: number;
-}
+
 
 interface LoginProgress {
   step: 'idle' | 'validating' | 'authenticating' | 'loading-dashboard' | 'success';
@@ -75,14 +62,23 @@ const ChildLoginForm: React.FC = () => {
   }>({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [retryCount, setRetryCount] = useState(0);
-  const { childLogin, isLoading: authLoading, isAuthenticated, isChild } = useAuth();
-  const { error, clearError, handleError, retryOperation } = useChildErrorHandler();
+  const [, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loginProgress, setLoginProgress] = useState<LoginProgress>({
+    step: 'idle',
+    message: '',
+    progress: 0
+  });
+  const { childLogin, isAuthenticated, isChild } = useAuth();
   const navigate = useNavigate();
   const { setUserRole } = useTheme();
 
   // Set the theme to child mode and capture device information
   useEffect(() => {
     setUserRole('child');
+    
+    // Clear any existing session on component mount
+    SessionManager.clearSession();
     
     // Capture device information for security logging
     const captureDeviceInfo = () => {
@@ -122,180 +118,17 @@ const ChildLoginForm: React.FC = () => {
     }
   }, [isAuthenticated, isChild, navigate]);
 
-  // Auto-hide success messages
-  useEffect(() => {
-    if (error?.autoHide) {
-      const timer = setTimeout(() => {
-        setError(null);
-      }, error.duration || 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+  // Auto-hide success messages (removed since AuthError doesn't have autoHide)
+  // useEffect(() => {
+  //   if (error?.autoHide) {
+  //     const timer = setTimeout(() => {
+  //       setError(null);
+  //     }, error.duration || 3000);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [error]);
 
-  // Enhanced child-friendly error message mapping
-  const getChildFriendlyError = (errorCode: string, errorMessage: string, statusCode?: number): ChildFriendlyError => {
-    // Handle network connectivity issues
-    if (!isOnline) {
-      return {
-        title: 'No internet connection! 📶',
-        message: 'Check your internet connection and try again when you\'re back online!',
-        icon: '📶',
-        severity: 'warning',
-        recoveryOptions: [
-          {
-            text: 'Try again',
-            action: () => setError(null),
-            primary: true
-          }
-        ]
-      };
-    }
-
-    switch (errorCode) {
-      case 'INVALID_CREDENTIALS':
-        return {
-          title: 'Oops! Let\'s try again! 🔑',
-          message: retryCount > 2 
-            ? 'Having trouble? Ask a parent or guardian to help you with your login details!'
-            : 'Your username or PIN doesn\'t match. Double-check and try again!',
-          icon: '🔑',
-          severity: 'warning',
-          recoveryOptions: [
-            {
-              text: 'Clear and try again',
-              action: () => {
-                setUsername('');
-                setPin('');
-                setError(null);
-                setRetryCount(0);
-              },
-              primary: true
-            },
-            ...(retryCount > 1 ? [{
-              text: 'Ask for help',
-              action: () => {
-                alert('Ask a parent or guardian to help you log in! They can check your username and PIN.');
-              }
-            }] : [])
-          ]
-        };
-      case 'ACCOUNT_LOCKED':
-      case 'TOO_MANY_ATTEMPTS':
-        return {
-          title: 'Account needs a break! ⏰',
-          message: 'Your account is taking a short break for safety. Try again in a few minutes, or ask a parent for help!',
-          icon: '⏰',
-          severity: 'info',
-          recoveryOptions: [
-            {
-              text: 'Ask a parent for help',
-              action: () => {
-                alert('Please ask a parent or guardian to help unlock your account.');
-              },
-              primary: true
-            }
-          ]
-        };
-      case 'NETWORK_ERROR':
-        return {
-          title: 'Connection trouble! 🌐',
-          message: 'We\'re having trouble connecting to our servers. Check your internet and try again!',
-          icon: '🌐',
-          severity: 'warning',
-          recoveryOptions: [
-            {
-              text: 'Try again',
-              action: () => setError(null),
-              primary: true
-            },
-            {
-              text: 'Check connection',
-              action: () => {
-                if (navigator.onLine) {
-                  setError({
-                    title: 'Connection looks good! ✅',
-                    message: 'Your internet connection seems fine. Let\'s try logging in again!',
-                    icon: '✅',
-                    severity: 'success',
-                    autoHide: true,
-                    duration: 2000
-                  });
-                } else {
-                  setError({
-                    title: 'No internet! 📶',
-                    message: 'Please check your internet connection and try again.',
-                    icon: '📶',
-                    severity: 'error'
-                  });
-                }
-              }
-            }
-          ]
-        };
-      case 'SERVER_ERROR':
-        return {
-          title: 'Our servers are taking a break! 🔧',
-          message: 'Don\'t worry, it\'s not your fault! Our team is working to fix this. Try again in a few minutes!',
-          icon: '🔧',
-          severity: 'error',
-          recoveryOptions: [
-            {
-              text: 'Try again',
-              action: () => setError(null),
-              primary: true
-            }
-          ]
-        };
-      case 'SESSION_EXPIRED':
-        return {
-          title: 'Session expired! ⏰',
-          message: 'Your previous session has expired. Please log in again to continue learning!',
-          icon: '⏰',
-          severity: 'info',
-          recoveryOptions: [
-            {
-              text: 'Log in again',
-              action: () => {
-                SessionManager.clearSession();
-                setError(null);
-                setUsername('');
-                setPin('');
-              },
-              primary: true
-            }
-          ]
-        };
-      default:
-        // Handle HTTP status codes
-        if (statusCode === 500 || statusCode === 502 || statusCode === 503) {
-          return getChildFriendlyError('SERVER_ERROR', errorMessage, statusCode);
-        } else if (statusCode === 400 || statusCode === 401) {
-          return getChildFriendlyError('INVALID_CREDENTIALS', errorMessage, statusCode);
-        } else if (statusCode === 429) {
-          return getChildFriendlyError('TOO_MANY_ATTEMPTS', errorMessage, statusCode);
-        }
-
-        return {
-          title: 'Hmm, something happened! 🤔',
-          message: 'Don\'t worry! Let\'s try logging in again. If this keeps happening, ask a parent for help!',
-          icon: '🤔',
-          severity: 'warning',
-          recoveryOptions: [
-            {
-              text: 'Try again',
-              action: () => setError(null),
-              primary: true
-            },
-            {
-              text: 'Ask for help',
-              action: () => {
-                alert('If you keep having trouble, ask a parent or guardian to help you!');
-              }
-            }
-          ]
-        };
-    }
-  };
+  // Simplified error handling - removed complex error mapping
 
   // Input validation
   const validateInputs = (): boolean => {
@@ -319,13 +152,10 @@ const ChildLoginForm: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const updateLoginProgress = (step: LoginProgress['step'], message: string, progress: number) => {
-    setLoginProgress({ step, message, progress });
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError();
+    setError(null);
     setValidationErrors({});
 
     // Check online status first
@@ -345,72 +175,46 @@ const ChildLoginForm: React.FC = () => {
     setRetryCount(prev => prev + 1);
 
     try {
-      await retryOperation(async () => {
-        console.log('Attempting child login with:', { username, retryCount });
-        
-        // Use the AuthContext childLogin method with enhanced error handling
-        await childLogin(username, pin);
-        
-        console.log('Child login successful through AuthContext');
+      console.log('Attempting child login with:', { username, retryCount });
+      
+      // Clear any existing session before attempting new login
+      SessionManager.clearSession();
+      
+      // Use the AuthContext childLogin method
+      await childLogin(username, pin);
+      
+      console.log('Child login successful through AuthContext');
 
-        // Show success state
-        setShowSuccess(true);
+      // Show success state
+      setShowSuccess(true);
 
-        // Reset retry count on success
-        setRetryCount(0);
+      // Reset retry count on success
+      setRetryCount(0);
 
-        // Navigate after success animation with replace to prevent back navigation
-        setTimeout(() => {
-          navigate('/child-dashboard', { replace: true });
-        }, 1500);
-      });
+      // Navigate after success animation
+      setTimeout(() => {
+        navigate('/child-dashboard', { replace: true });
+      }, 1500);
 
     } catch (err: any) {
       console.error('Child login error:', err);
       
-      let errorCode = 'UNKNOWN_ERROR';
-      let errorMessage = 'Something went wrong';
-      let statusCode = err.response?.status;
+      let errorMessage = 'Login failed. Please try again.';
       
-      if (err.response) {
-        if (err.response.data?.error) {
-          errorCode = err.response.data.error.code || 'UNKNOWN_ERROR';
-          errorMessage = err.response.data.error.message || 'Something went wrong';
-        } else if (err.response.status === 400) {
-          errorCode = 'INVALID_CREDENTIALS';
-          errorMessage = 'Invalid username or PIN';
-        } else if (err.response.status === 401) {
-          errorCode = 'INVALID_CREDENTIALS';
-          errorMessage = 'Authentication failed';
-        } else if (err.response.status === 429) {
-          errorCode = 'TOO_MANY_ATTEMPTS';
-          errorMessage = 'Too many login attempts';
-        } else if (err.response.status >= 500) {
-          errorCode = 'SERVER_ERROR';
-          errorMessage = 'Server error - please try again';
-        }
-      } else if (err.request) {
-        // Network error
-        errorCode = 'NETWORK_ERROR';
-        errorMessage = 'Network error - check your connection';
-      } else {
-        // Other error
-        errorMessage = err.message || 'An unexpected error occurred';
+      if (err.response?.status === 401) {
+        errorMessage = 'Invalid username or PIN. Please check and try again.';
+      } else if (err.response?.status === 429) {
+        errorMessage = 'Too many attempts. Please wait and try again.';
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection. Please check your connection.';
       }
 
-      setError(getChildFriendlyError(errorCode, errorMessage, statusCode));
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleRetry = () => {
-    setError(null);
-    setValidationErrors({});
-    setShowSuccess(false);
-    updateLoginProgress('idle', '', 0);
-    setRetryCount(0);
-  };
 
   const handleClearForm = () => {
     setUsername('');
@@ -418,7 +222,7 @@ const ChildLoginForm: React.FC = () => {
     setError(null);
     setValidationErrors({});
     setShowSuccess(false);
-    updateLoginProgress('idle', '', 0);
+    setLoginProgress({ step: 'idle', message: '', progress: 0 });
     setRetryCount(0);
   };
 
@@ -655,13 +459,9 @@ const ChildLoginForm: React.FC = () => {
                 {/* Error Messages */}
                 {error && (
                   <Fade in={!!error} timeout={300}>
-                    <Box sx={{ mb: 3 }}>
-                      <ChildFriendlyErrorDisplay
-                        error={error}
-                        onDismiss={clearError}
-                        showTechnicalDetails={process.env.NODE_ENV === 'development'}
-                      />
-                    </Box>
+                    <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+                      {error}
+                    </Alert>
                   </Fade>
                 )}
 
@@ -910,3 +710,7 @@ const ChildLoginForm: React.FC = () => {
 };
 
 export default ChildLoginForm;
+
+function handleError(networkError: Error) {
+  throw new Error('Function not implemented.');
+}

@@ -23,6 +23,7 @@ import contentSafetyRoutes from './routes/contentSafety';
 import contentRoutes from './routes/content';
 import geminiRoutes from './routes/gemini';
 import studyPlansRoutes from './routes/studyPlans';
+import activitiesRoutes from './routes/activities';
 import curriculumRoutes from './routes/curriculum';
 import educationalContentRoutes from './routes/educationalContent';
 import youtubeResourceRoutes from './routes/youtubeResources';
@@ -35,9 +36,11 @@ import childErrorRoutes from './routes/childErrors';
 import childHelpAnalyticsRoutes from './routes/childHelpAnalytics';
 import realTimeProgressRoutes from './routes/realTimeProgress';
 import parentalMonitoringRoutes from './routes/parentalMonitoring';
+import parentDashboardRoutes from './routes/parentDashboard';
 import userTestingRoutes from './routes/userTesting';
 import testChildAuthRoutes from './routes/testChildAuth';
 import childSessionMonitoringRoutes from './routes/childSessionMonitoring';
+import loggingAnalyticsRoutes from './routes/loggingAnalytics';
 import { scheduledNotificationService } from './services/scheduledNotificationService';
 import { logger } from './utils/logger';
 
@@ -155,6 +158,7 @@ app.use('/api/child', childRoutes);
 app.use('/api/profile', createRateLimiter('upload'), profileRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/study-plans', studyPlansRoutes);
+app.use('/api/activities', activitiesRoutes);
 app.use('/api/claude', createRateLimiter('ai'), claudeRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/plan-adaptation', planAdaptationRoutes);
@@ -174,8 +178,10 @@ app.use('/api/child/errors', childErrorRoutes);
 app.use('/api/child', childHelpAnalyticsRoutes);
 app.use('/api/real-time-progress', realTimeProgressRoutes);
 app.use('/api/parental-monitoring', parentalMonitoringRoutes);
+app.use('/api/parent', parentDashboardRoutes);
 app.use('/api/user-testing', userTestingRoutes);
 app.use('/api/child-session-monitoring', childSessionMonitoringRoutes);
+app.use('/api/logging', loggingAnalyticsRoutes);
 app.use('/api/test', testChildAuthRoutes);
 
 // Initialize real-time progress service

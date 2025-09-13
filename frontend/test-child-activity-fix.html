@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Child Activity Access Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .log { max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Child Activity Access Fix Test</h1>
+    
+    <div class="test-section info">
+        <h3>Problem Summary</h3>
+        <p>Frontend is getting 404 errors when trying to access activity endpoints:</p>
+        <ul>
+            <li><code>GET /api/activities/cmffmtts70007kih6a5f6fwj8/progress</code></li>
+            <li><code>POST /api/activities/cmffmtts70007kih6a5f6fwj8/start</code></li>
+        </ul>
+        <p>Child ID: <code>cmfeccya6000fnjw9k5yo2m0l</code> (tim)</p>
+    </div>
+
+    <div class="test-section">
+        <h3>Step 1: Test Child Authentication</h3>
+        <button onclick="testChildAuth()">Test Child Login</button>
+        <div id="auth-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Step 2: Test Activity Access</h3>
+        <button onclick="testActivityAccess()">Test Activity Endpoints</button>
+        <div id="activity-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Step 3: Fix Frontend Authentication</h3>
+        <button onclick="fixAuthentication()">Login as Correct Child</button>
+        <div id="fix-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Logs</h3>
+        <div id="logs" class="log"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        let authToken = null;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        async function testChildAuth() {
+            const resultDiv = document.getElementById('auth-result');
+            resultDiv.innerHTML = '<p>Testing child authentication...</p>';
+            
+            try {
+                log('Testing child login for "tim"...');
+                
+                const response = await fetch(`${API_BASE}/auth/child/login-legacy`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'tim',
+                        pin: '1234'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.accessToken;
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Authentication Successful</h4>
+                            <p><strong>Child:</strong> ${data.child.name}</p>
+                            <p><strong>Child ID:</strong> ${data.child.id}</p>
+                            <p><strong>Token:</strong> ${authToken.substring(0, 20)}...</p>
+                        </div>
+                    `;
+                    
+                    log(`Authentication successful for ${data.child.name}`, 'success');
+                    
+                    // Store token in localStorage like the frontend does
+                    localStorage.setItem('accessToken', authToken);
+                    localStorage.setItem('user', JSON.stringify(data.child));
+                    
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'Login failed');
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Authentication Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+                log(`Authentication failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testActivityAccess() {
+            const resultDiv = document.getElementById('activity-result');
+            
+            if (!authToken) {
+                resultDiv.innerHTML = '<div class="error">Please authenticate first</div>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<p>Testing activity endpoints...</p>';
+            
+            const activityId = 'cmffmtts70007kih6a5f6fwj8';
+            const headers = {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            };
+
+            let results = [];
+
+            // Test 1: Get activity progress
+            try {
+                log('Testing GET /activities/:id/progress...');
+                const response = await fetch(`${API_BASE}/activities/${activityId}/progress`, {
+                    headers
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.push(`✅ Progress endpoint: ${data.progress.status}`);
+                    log('Progress endpoint working', 'success');
+                } else {
+                    const error = await response.json();
+                    results.push(`❌ Progress endpoint: ${error.error?.message}`);
+                    log(`Progress endpoint failed: ${error.error?.message}`, 'error');
+                }
+            } catch (error) {
+                results.push(`❌ Progress endpoint: ${error.message}`);
+                log(`Progress endpoint error: ${error.message}`, 'error');
+            }
+
+            // Test 2: Start activity
+            try {
+                log('Testing POST /activities/:id/start...');
+                const response = await fetch(`${API_BASE}/activities/${activityId}/start`, {
+                    method: 'POST',
+                    headers
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.push(`✅ Start endpoint: ${data.activity.title}`);
+                    log('Start endpoint working', 'success');
+                } else {
+                    const error = await response.json();
+                    results.push(`❌ Start endpoint: ${error.error?.message}`);
+                    log(`Start endpoint failed: ${error.error?.message}`, 'error');
+                }
+            } catch (error) {
+                results.push(`❌ Start endpoint: ${error.message}`);
+                log(`Start endpoint error: ${error.message}`, 'error');
+            }
+
+            // Test 3: Get activity details
+            try {
+                log('Testing GET /activities/:id...');
+                const response = await fetch(`${API_BASE}/activities/${activityId}`, {
+                    headers
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.push(`✅ Activity details: ${data.activity.title}`);
+                    log('Activity details endpoint working', 'success');
+                } else {
+                    const error = await response.json();
+                    results.push(`❌ Activity details: ${error.error?.message}`);
+                    log(`Activity details failed: ${error.error?.message}`, 'error');
+                }
+            } catch (error) {
+                results.push(`❌ Activity details: ${error.message}`);
+                log(`Activity details error: ${error.message}`, 'error');
+            }
+
+            resultDiv.innerHTML = `
+                <div class="info">
+                    <h4>Activity Endpoint Test Results</h4>
+                    <ul>
+                        ${results.map(result => `<li>${result}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        async function fixAuthentication() {
+            const resultDiv = document.getElementById('fix-result');
+            
+            try {
+                log('Fixing frontend authentication...');
+                
+                // Clear any existing auth data
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('user');
+                localStorage.removeItem('refreshToken');
+                
+                // Login as the correct child
+                const response = await fetch(`${API_BASE}/auth/child/login-legacy`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'tim',
+                        pin: '1234'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Store authentication data
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('user', JSON.stringify(data.child));
+                    if (data.refreshToken) {
+                        localStorage.setItem('refreshToken', data.refreshToken);
+                    }
+                    
+                    authToken = data.accessToken;
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Authentication Fixed</h4>
+                            <p>Frontend is now authenticated as: <strong>${data.child.name}</strong></p>
+                            <p>Child ID: <code>${data.child.id}</code></p>
+                            <p>You can now refresh the main application and the "Continue Learning" button should work.</p>
+                            <button onclick="window.location.reload()">Refresh Page</button>
+                        </div>
+                    `;
+                    
+                    log(`Authentication fixed for ${data.child.name}`, 'success');
+                    log('You can now use the main application', 'success');
+                    
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'Login failed');
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Fix Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+                log(`Fix failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-run initial test
+        window.onload = function() {
+            log('Child Activity Access Fix Test loaded');
+            log('Click "Test Child Login" to start testing');
+        };
+    </script>
+</body>
+</html>

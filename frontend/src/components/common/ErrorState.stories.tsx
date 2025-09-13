@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { action } from '@storybook/addon-actions';
 import { Button } from '@mui/material';
 import { Refresh, ContactSupport } from '@mui/icons-material';
-import ErrorState from './ErrorState';
+import { ErrorState } from './index';
 import { ThemeProvider } from '../../theme/ThemeContext';
 
 const meta: Meta<typeof ErrorState> = {

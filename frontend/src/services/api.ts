@@ -38,6 +38,15 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
+    // Don't intercept login requests - let them fail naturally
+    if (originalRequest.url?.includes('/auth/') && (
+        originalRequest.url.includes('/login') || 
+        originalRequest.url.includes('/register')
+    )) {
+      console.log('Login/register request failed, not intercepting');
+      return Promise.reject(error);
+    }
+    
     // Check for authentication loop before proceeding
     if (ChildAuthErrorHandler.isLoopDetected()) {
       console.warn('Authentication loop detected in API interceptor, breaking loop');
@@ -297,22 +306,58 @@ export const studyPlanApi = {
   getPlans: async (childId?: string): Promise<StudyPlan[]> => {
     const url = childId ? `/study-plans?childId=${childId}` : '/study-plans';
     const response = await api.get(url);
-    return response.data.plans;
+    // Ensure objectives are properly parsed
+    const plans = response.data.plans.map((plan: any) => ({
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    }));
+    return plans;
   },
 
   getPlan: async (planId: string): Promise<StudyPlan> => {
     const response = await api.get(`/study-plans/${planId}`);
-    return response.data.plan;
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 
   createPlan: async (data: CreateStudyPlanRequest): Promise<StudyPlan> => {
     const response = await api.post('/study-plans', data);
-    return response.data.plan;
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 
   updatePlan: async (planId: string, data: UpdateStudyPlanRequest): Promise<StudyPlan> => {
     const response = await api.put(`/study-plans/${planId}`, data);
-    return response.data.plan;
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 
   deletePlan: async (planId: string): Promise<{ message: string }> => {
@@ -322,17 +367,44 @@ export const studyPlanApi = {
 
   activatePlan: async (planId: string): Promise<StudyPlan> => {
     const response = await api.post(`/study-plans/${planId}/activate`);
-    return response.data.plan;
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 
   pausePlan: async (planId: string): Promise<StudyPlan> => {
     const response = await api.post(`/study-plans/${planId}/pause`);
-    return response.data.plan;
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 
   completePlan: async (planId: string): Promise<StudyPlan> => {
     const response = await api.post(`/study-plans/${planId}/complete`);
-    return response.data.plan;
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 };
 
@@ -554,7 +626,21 @@ export const childHelpAnalyticsApi = {
 export const childDashboardApi = {
   getDashboard: async (childId: string): Promise<any> => {
     const response = await api.get(`/child/${childId}/dashboard`);
-    return response.data.dashboard;
+    return response.data;
+  },
+
+  getStudyPlan: async (childId: string, planId: string): Promise<StudyPlan> => {
+    const response = await api.get(`/study-plans/child/${childId}/plan/${planId}`);
+    const plan = response.data.plan;
+    // Ensure objectives are properly parsed
+    return {
+      ...plan,
+      objectives: typeof plan.objectives === 'string' 
+        ? JSON.parse(plan.objectives) 
+        : Array.isArray(plan.objectives) 
+          ? plan.objectives 
+          : []
+    };
   },
 
   getProgress: async (childId: string, filters?: {
@@ -614,13 +700,29 @@ export const childDashboardApi = {
     return response.data;
   },
 
-  updateActivityProgress: async (activityId: string, progressData: any): Promise<any> => {
-    const response = await api.post(`/child/activity/${activityId}/progress`, progressData);
+  updateActivityProgress: async (childId: string, activityId: string, progressData: {
+    timeSpent?: number;
+    score?: number;
+    status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+    sessionData?: any;
+  }): Promise<any> => {
+    const response = await api.post(`/child/activity/${activityId}/progress`, {
+      ...progressData,
+      childId
+    });
     return response.data;
   },
 
-  completeActivity: async (activityId: string, completionData: any): Promise<any> => {
-    const response = await api.post(`/child/activity/${activityId}/complete`, completionData);
+  completeActivity: async (childId: string, activityId: string, completionData: {
+    score: number;
+    timeSpent: number;
+    sessionData?: any;
+  }): Promise<any> => {
+    const response = await api.post(`/child/activity/${activityId}/progress`, {
+      ...completionData,
+      childId,
+      status: 'COMPLETED'
+    });
     return response.data;
   }
 };
@@ -733,6 +835,18 @@ export const parentalMonitoringApi = {
 
   sendWeeklyReport: async (): Promise<void> => {
     await api.post('/parental-monitoring/send-weekly-report');
+  },
+};
+
+export const parentDashboardApi = {
+  getDashboard: async (): Promise<any> => {
+    const response = await api.get('/parent/dashboard');
+    return response.data;
+  },
+
+  getChildDashboard: async (childId: string): Promise<any> => {
+    const response = await api.get(`/parent/dashboard/${childId}`);
+    return response.data;
   },
 };
 

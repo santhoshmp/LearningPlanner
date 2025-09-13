@@ -212,7 +212,7 @@ const StudyPlanReview: React.FC = () => {
           >
             Back to Study Plans
           </Button>
-          {plan.status === 'draft' && (
+          {plan.status.toLowerCase() === 'draft' && (
             <Button
               variant="contained"
               color="success"
@@ -223,7 +223,7 @@ const StudyPlanReview: React.FC = () => {
               Activate Plan
             </Button>
           )}
-          {plan.status === 'active' && (
+          {plan.status.toLowerCase() === 'active' && (
             <Button
               variant="contained"
               color="warning"
@@ -353,8 +353,8 @@ const StudyPlanReview: React.FC = () => {
                 </Box>
               ) : (
                 <List>
-                  {plan.objectives.map((objective, index) => (
-                    <ListItem key={objective.id} sx={{ px: 0 }}>
+                  {(Array.isArray(plan.objectives) ? plan.objectives : []).map((objective, index) => (
+                    <ListItem key={objective.id || `obj_${index}`} sx={{ px: 0 }}>
                       <ListItemIcon>
                         {objective.completed ? (
                           <CheckIcon color="success" />
@@ -373,6 +373,16 @@ const StudyPlanReview: React.FC = () => {
                       />
                     </ListItem>
                   ))}
+                  {(!Array.isArray(plan.objectives) || plan.objectives.length === 0) && (
+                    <ListItem sx={{ px: 0 }}>
+                      <ListItemText
+                        primary="No objectives available"
+                        primaryTypographyProps={{
+                          sx: { color: 'text.secondary', fontStyle: 'italic' }
+                        }}
+                      />
+                    </ListItem>
+                  )}
                 </List>
               )}
             </CardContent>

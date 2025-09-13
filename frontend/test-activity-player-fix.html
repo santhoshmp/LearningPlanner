@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Player Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .log { max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Activity Player Fix Test</h1>
+    
+    <div class="test-section info">
+        <h3>Fix Summary</h3>
+        <p>Fixed the following issues in ActivityPlayer:</p>
+        <ul>
+            <li>❌ <code>lastInteractionAt</code> field (doesn't exist in database)</li>
+            <li>❌ Status values: <code>'in_progress'</code> → <code>'IN_PROGRESS'</code></li>
+            <li>❌ Status values: <code>'not_started'</code> → <code>'NOT_STARTED'</code></li>
+            <li>❌ Time conversion: seconds → minutes for database</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Progress Updates</h3>
+        <button onclick="testProgressUpdates()">Test Progress Updates</button>
+        <div id="progress-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Logs</h3>
+        <div id="logs" class="log"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        let authToken = null;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+            logEntry.style.color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        async function testProgressUpdates() {
+            const resultDiv = document.getElementById('progress-result');
+            resultDiv.innerHTML = '<p>Testing progress updates...</p>';
+            
+            try {
+                // Login
+                log('Authenticating...');
+                const loginResponse = await fetch(`${API_BASE}/auth/child/login-legacy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'tim', pin: '1234' })
+                });
+
+                const loginData = await loginResponse.json();
+                authToken = loginData.accessToken;
+                log('Authenticated successfully', 'success');
+
+                const headers = {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                };
+
+                const activityId = 'cmffmtts70007kih6a5f6fwj8';
+
+                // Test progress update with fixed data
+                log('Testing progress update with fixed format...');
+                const progressData = {
+                    status: 'IN_PROGRESS',
+                    timeSpent: 5
+                };
+
+                const updateResponse = await fetch(`${API_BASE}/activities/${activityId}/progress`, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify(progressData)
+                });
+                
+                if (updateResponse.ok) {
+                    const data = await updateResponse.json();
+                    log('Progress update successful!', 'success');
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Progress Update Fix Successful!</h4>
+                            <p><strong>Status:</strong> ${data.progress.status}</p>
+                            <p><strong>Time Spent:</strong> ${data.progress.timeSpent} minutes</p>
+                            <p><strong>Updated At:</strong> ${data.progress.updatedAt}</p>
+                            <p>The ActivityPlayer should now work without 500 errors!</p>
+                        </div>
+                    `;
+                } else {
+                    const error = await updateResponse.json();
+                    throw new Error(error.error?.message || 'Update failed');
+                }
+
+            } catch (error) {
+                log(`Test failed: ${error.message}`, 'error');
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Test Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        window.onload = function() {
+            log('Activity Player Fix Test loaded');
+            log('Fixed: Removed lastInteractionAt, fixed status values, fixed time conversion');
+        };
+    </script>
+</body>
+</html>

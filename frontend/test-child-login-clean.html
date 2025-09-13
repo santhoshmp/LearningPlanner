@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clean Child Login Test</title>
+</head>
+<body>
+    <h1>Clean Child Login Test</h1>
+    <div id="status">Testing...</div>
+    
+    <script>
+        async function testCleanLogin() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                // Clear all localStorage first
+                console.log('Clearing localStorage...');
+                localStorage.clear();
+                statusDiv.innerHTML = 'Cleared localStorage, testing login...';
+                
+                // Test the API directly
+                const response = await fetch('http://localhost:3001/api/auth/child/login-legacy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'testchild',
+                        pin: '1234'
+                    })
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Login successful:', data);
+                    statusDiv.innerHTML = `
+                        <div style="color: green;">
+                            <h2>✅ Login Successful!</h2>
+                            <p>Child: ${data.child.name}</p>
+                            <p>Username: ${data.child.username}</p>
+                            <p>Token received: ${data.accessToken ? 'Yes' : 'No'}</p>
+                        </div>
+                    `;
+                } else {
+                    const errorData = await response.json();
+                    console.error('Login failed:', errorData);
+                    statusDiv.innerHTML = `
+                        <div style="color: red;">
+                            <h2>❌ Login Failed</h2>
+                            <p>Status: ${response.status}</p>
+                            <p>Error: ${JSON.stringify(errorData, null, 2)}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Test error:', error);
+                statusDiv.innerHTML = `
+                    <div style="color: red;">
+                        <h2>❌ Test Error</h2>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Run the test
+        testCleanLogin();
+    </script>
+</body>
+</html>
+</body>
+</html>

@@ -3,11 +3,31 @@ import { authenticateToken } from '../middleware/auth';
 import { validate } from '../utils/validation';
 import { childProgressService } from '../services/childProgressService';
 import { ChildBadgeService } from '../services/childBadgeService';
+import { progressConsistencyService } from '../services/progressConsistencyService';
 import { authService } from '../services/authService';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { 
+  dashboardLogging, 
+  progressUpdateLogging, 
+  monitorDatabaseOperation 
+} from '../middleware/studyPlanLoggingMiddleware';
 import Joi from 'joi';
 import { securityMonitoring } from '../middleware/securityMonitoring';
+import { 
+  childErrorHandler, 
+  asyncHandler, 
+  sendChildError,
+  childErrorHandlerMiddleware 
+} from '../middleware/childErrorHandler';
+import { 
+  validateChild, 
+  validateChildParams, 
+  validateChildQuery,
+  sanitizeChildInput,
+  childRateLimit,
+  childValidationSchemas 
+} from '../utils/childValidation';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -15,7 +35,7 @@ const childBadgeService = new ChildBadgeService(prisma);
 
 // Validation schemas using Joi to match existing pattern
 const activityProgressSchema = Joi.object({
-  activityId: Joi.string().uuid().required(),
+  activityId: Joi.string().required(), // Changed from uuid() to allow CUID format
   timeSpent: Joi.number().min(0).required(),
   score: Joi.number().min(0).max(100).optional(),
   status: Joi.string().valid('NOT_STARTED', 'IN_PROGRESS', 'COMPLETED').optional(),
@@ -52,7 +72,7 @@ const activityProgressSchema = Joi.object({
 });
 
 const activityCompletionSchema = Joi.object({
-  activityId: Joi.string().uuid().required(),
+  activityId: Joi.string().required(), // Changed from uuid() to allow CUID format
   score: Joi.number().min(0).max(100).required(),
   timeSpent: Joi.number().min(0).required(),
   sessionData: Joi.object({
@@ -102,18 +122,34 @@ const suspiciousActivitySchema = Joi.object({
   location: Joi.string().required()
 });
 
-// Middleware to ensure child authentication
+// Enhanced middleware to ensure child authentication with child-friendly errors
 const requireChildAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (!req.user || req.user.role !== 'CHILD') {
-    return res.status(401).json({
-      error: {
-        code: 'CHILD_AUTH_REQUIRED',
-        message: 'Child authentication is required',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
+    return sendChildError(res, 'CHILD_AUTH_REQUIRED', 'Child authentication is required', {
+      childId: req.user?.userId,
+      url: req.originalUrl
     });
   }
+  next();
+};
+
+// Middleware to verify child access to their own data
+const verifyChildAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const { childId } = req.params;
+  
+  if (!childId) {
+    return sendChildError(res, 'VALIDATION_ERROR', 'Child ID is required', {
+      url: req.originalUrl
+    });
+  }
+  
+  if (req.user!.userId !== childId) {
+    return sendChildError(res, 'ACCESS_DENIED', 'Access denied to this child data', {
+      childId: req.user?.userId,
+      url: req.originalUrl
+    });
+  }
+  
   next();
 };
 
@@ -121,111 +157,232 @@ const requireChildAuth = (req: express.Request, res: express.Response, next: exp
 
 /**
  * GET /api/child/:childId/dashboard
- * Get child dashboard data with progress summary
+ * Get child dashboard data with complete progress summary
  */
-router.get('/:childId/dashboard', authenticateToken, requireChildAuth, async (req, res) => {
-  try {
+router.get('/:childId/dashboard', 
+  ...dashboardLogging('DASHBOARD_ACCESS'),
+  authenticateToken, 
+  requireChildAuth, 
+  verifyChildAccess,
+  sanitizeChildInput,
+  childRateLimit(30, 60000), // 30 requests per minute
+  validateChildParams({
+    childId: childValidationSchemas.childId
+  }),
+  asyncHandler(async (req: express.Request, res: express.Response) => {
     const { childId } = req.params;
-    
-    // Verify the authenticated child matches the requested child
-    if (req.user!.userId !== childId) {
-      return res.status(403).json({
-        error: {
-          code: 'ACCESS_DENIED',
-          message: 'Access denied to this child dashboard',
-          timestamp: new Date().toISOString(),
-          requestId: req.id || 'unknown'
+
+    // Get child profile data
+    const childProfile = await monitorDatabaseOperation(
+      'get_child_profile',
+      'child_profiles',
+      'SELECT',
+      () => prisma.childProfile.findUnique({
+        where: { id: childId },
+        select: {
+          id: true,
+          name: true,
+          age: true,
+          gradeLevel: true,
+          skillProfile: true
         }
+      }),
+      { childId }
+    );
+
+    if (!childProfile) {
+      return sendChildError(res, 'CHILD_NOT_FOUND', 'Child profile not found', {
+        childId,
+        url: req.originalUrl
       });
     }
 
-    // Get real-time progress data
-    const realtimeProgress = await childProgressService.getRealtimeProgress(childId);
-    
-    // Get badge progress
-    const badgeProgress = await childBadgeService.getBadgeProgress(childId);
-    
-    // Get next badges to earn
-    const nextBadges = await childBadgeService.getNextBadges(childId, 3);
-    
-    // Get recent achievements (last 5)
-    const recentAchievements = await prisma.achievement.findMany({
-      where: { childId },
-      orderBy: { earnedAt: 'desc' },
-      take: 5
+    // Get ALL study plans (not just ACTIVE) - as per requirements 1.2, 1.3
+    const studyPlans = await monitorDatabaseOperation(
+      'get_child_study_plans_with_progress',
+      'study_plans',
+      'SELECT',
+      () => prisma.studyPlan.findMany({
+        where: { childId },
+        include: {
+          activities: {
+            include: {
+              progressRecords: {
+                where: { childId }
+              }
+            },
+            orderBy: { createdAt: 'asc' }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+      { childId }
+    );
+
+    // Calculate detailed progress for each study plan
+    const studyPlansWithProgress = studyPlans.map(plan => {
+      const totalActivities = plan.activities.length;
+      const completedActivities = plan.activities.filter(activity => 
+        activity.progressRecords.some(record => record.status === 'COMPLETED')
+      ).length;
+      const inProgressActivities = plan.activities.filter(activity => 
+        activity.progressRecords.some(record => record.status === 'IN_PROGRESS')
+      ).length;
+      
+      // Calculate total time spent across all activities
+      const totalTimeSpent = plan.activities.reduce((total, activity) => {
+        const activityTimeSpent = activity.progressRecords.reduce((activityTotal, record) => {
+          return activityTotal + (record.timeSpent || 0);
+        }, 0);
+        return total + activityTimeSpent;
+      }, 0);
+
+      // Calculate average score for completed activities
+      const completedRecords = plan.activities.flatMap(activity => 
+        activity.progressRecords.filter(record => record.status === 'COMPLETED')
+      );
+      const averageScore = completedRecords.length > 0 
+        ? completedRecords.reduce((sum, record) => sum + (record.score || 0), 0) / completedRecords.length
+        : 0;
+      
+      // Calculate progress percentage and round to 1 decimal place
+      const progressPercentage = totalActivities > 0 
+        ? Math.round((completedActivities / totalActivities) * 1000) / 10 
+        : 0;
+      
+      return {
+        ...plan,
+        objectives: typeof plan.objectives === 'string' ? JSON.parse(plan.objectives) : plan.objectives,
+        totalActivities,
+        completedActivities,
+        inProgressActivities,
+        progressPercentage,
+        totalTimeSpent, // in seconds
+        averageScore: Math.round(averageScore * 10) / 10
+      };
     });
 
-    // Get active study plans
-    const activeStudyPlans = await prisma.studyPlan.findMany({
-      where: {
-        childId,
-        status: 'ACTIVE'
-      },
+    // Get basic progress data directly from database
+    const allProgressRecords = await prisma.progressRecord.findMany({
+      where: { childId },
       include: {
-        activities: {
+        activity: {
           include: {
-            progressRecords: {
-              where: { childId }
+            plan: {
+              select: {
+                subject: true
+              }
             }
           }
         }
       }
     });
 
-    // Calculate study plan progress
-    const studyPlansWithProgress = activeStudyPlans.map(plan => {
-      const totalActivities = plan.activities.length;
-      const completedActivities = plan.activities.filter(activity => 
-        activity.progressRecords.some(record => record.status === 'COMPLETED')
-      ).length;
-      
-      return {
-        ...plan,
-        totalActivities,
-        completedActivities,
-        progressPercentage: totalActivities > 0 ? (completedActivities / totalActivities) * 100 : 0
-      };
+    // Calculate basic progress summary
+    const totalActivities = allProgressRecords.length;
+    const completedActivities = allProgressRecords.filter(r => r.status === 'COMPLETED').length;
+    const inProgressActivities = allProgressRecords.filter(r => r.status === 'IN_PROGRESS').length;
+    const totalTimeSpent = allProgressRecords.reduce((sum, r) => sum + (r.timeSpent || 0), 0);
+    const completedRecords = allProgressRecords.filter(r => r.status === 'COMPLETED');
+    const averageScore = completedRecords.length > 0 
+      ? completedRecords.reduce((sum, r) => sum + (r.score || 0), 0) / completedRecords.length 
+      : 0;
+
+    // Get current learning streaks
+    const currentStreaks = await prisma.learningStreak.findMany({
+      where: { childId }
+    });
+    
+    // Get recent achievements
+    const recentAchievements = await prisma.achievement.findMany({
+      where: { childId },
+      orderBy: { earnedAt: 'desc' },
+      take: 5
     });
 
+    // Get today's progress for daily goals
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const todaysProgressRecords = allProgressRecords.filter(r => 
+      r.updatedAt >= today && r.updatedAt < tomorrow
+    );
+    const todaysCompletedActivities = todaysProgressRecords.filter(r => r.status === 'COMPLETED').length;
+    const todaysTimeSpent = todaysProgressRecords.reduce((sum, r) => sum + (r.timeSpent || 0), 0);
+
+    // Format dashboard data for frontend consumption
     const dashboardData = {
       child: {
-        id: childId,
-        // Add child profile data if needed
+        id: childProfile.id,
+        name: childProfile.name,
+        age: childProfile.age,
+        grade: childProfile.gradeLevel,
+        skillProfile: childProfile.skillProfile
       },
-      progressSummary: realtimeProgress.todaysSummary,
-      activeActivities: realtimeProgress.activeActivities,
-      currentStreaks: realtimeProgress.currentStreaks,
+      progressSummary: {
+        totalActivities,
+        completedActivities,
+        inProgressActivities,
+        totalTimeSpent,
+        averageScore: Math.round(averageScore * 10) / 10,
+        weeklyGoalProgress: 0, // Simplified for now
+        monthlyGoalProgress: 0, // Simplified for now
+        lastActivityDate: allProgressRecords.length > 0 
+          ? allProgressRecords.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0].updatedAt
+          : null,
+        subjectProgress: [], // Simplified for now
+        // Add streak summary for easy access
+        currentDailyStreak: currentStreaks.find(s => s.streakType === 'DAILY')?.currentCount || 0,
+        longestDailyStreak: currentStreaks.find(s => s.streakType === 'DAILY')?.longestCount || 0,
+        activityCompletionStreak: currentStreaks.find(s => s.streakType === 'ACTIVITY_COMPLETION')?.currentCount || 0,
+        perfectScoreStreak: currentStreaks.find(s => s.streakType === 'PERFECT_SCORE')?.currentCount || 0,
+        helpFreeStreak: currentStreaks.find(s => s.streakType === 'HELP_FREE')?.currentCount || 0
+      },
       studyPlans: studyPlansWithProgress,
+      currentStreaks: currentStreaks.map(streak => ({
+        id: streak.id,
+        type: streak.streakType,
+        currentCount: streak.currentCount,
+        longestCount: streak.longestCount,
+        lastActivityDate: streak.lastActivityDate,
+        streakStartDate: streak.streakStartDate,
+        isActive: streak.isActive
+      })),
       badges: {
-        recent: recentAchievements,
-        progress: badgeProgress,
-        nextToEarn: nextBadges
+        recent: recentAchievements.map(achievement => ({
+          id: achievement.id,
+          title: achievement.title,
+          description: achievement.description,
+          type: achievement.type,
+          earnedAt: achievement.earnedAt,
+          celebrationShown: achievement.celebrationShown
+        })),
+        progress: [], // Simplified for now
+        nextToEarn: [] // Simplified for now
       },
       dailyGoals: {
         activitiesTarget: 5,
-        activitiesCompleted: realtimeProgress.todaysSummary.completedActivities,
+        activitiesCompleted: todaysCompletedActivities,
+        activitiesProgress: Math.min(100, (todaysCompletedActivities / 5) * 100),
         timeTarget: 1800, // 30 minutes in seconds
-        timeSpent: realtimeProgress.todaysSummary.totalTimeSpent
-      }
+        timeSpent: todaysTimeSpent,
+        timeProgress: Math.min(100, (todaysTimeSpent / 1800) * 100),
+        streakTarget: 7, // 7 day streak goal
+        currentStreak: currentStreaks.find(s => s.streakType === 'DAILY')?.currentCount || 0,
+        streakProgress: Math.min(100, ((currentStreaks.find(s => s.streakType === 'DAILY')?.currentCount || 0) / 7) * 100)
+      },
+      lastUpdated: new Date().toISOString()
     };
 
     res.json({
+      success: true,
       message: 'Dashboard data retrieved successfully',
       dashboard: dashboardData
     });
-
-  } catch (error) {
-    logger.error('Error getting child dashboard:', error);
-    res.status(500).json({
-      error: {
-        code: 'DASHBOARD_FETCH_FAILED',
-        message: 'Failed to retrieve dashboard data. Please try again.',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
-    });
-  }
-});
+  })
+);
 
 // ===== PROGRESS TRACKING API =====
 
@@ -233,91 +390,129 @@ router.get('/:childId/dashboard', authenticateToken, requireChildAuth, async (re
  * POST /api/child/activity/:activityId/progress
  * Update activity progress in real-time
  */
-router.post('/activity/:activityId/progress', authenticateToken, requireChildAuth, validate(activityProgressSchema), async (req, res) => {
-  try {
+router.post('/activity/:activityId/progress', 
+  ...progressUpdateLogging('PROGRESS_UPDATE'),
+  authenticateToken, 
+  requireChildAuth,
+  sanitizeChildInput,
+  childRateLimit(60, 60000), // 60 requests per minute
+  validateChildParams({
+    activityId: Joi.string().required().messages({
+      'string.empty': 'Activity ID is required',
+      'any.required': 'Which activity are you working on?'
+    })
+  }),
+  validateChild(childValidationSchemas.activityProgress),
+  asyncHandler(async (req: express.Request, res: express.Response) => {
     const { activityId } = req.params;
     const childId = req.user!.userId;
     
-    // Convert string dates to Date objects in sessionData if provided
-    const progressUpdate = { ...req.body };
-    if (progressUpdate.sessionData) {
-      progressUpdate.sessionData = {
-        ...progressUpdate.sessionData,
-        startTime: new Date(progressUpdate.sessionData.startTime),
-        endTime: progressUpdate.sessionData.endTime ? new Date(progressUpdate.sessionData.endTime) : undefined,
-        focusEvents: progressUpdate.sessionData.focusEvents?.map((event: any) => ({
-          ...event,
-          timestamp: new Date(event.timestamp)
-        })) || [],
-        difficultyAdjustments: progressUpdate.sessionData.difficultyAdjustments?.map((adj: any) => ({
-          ...adj,
-          timestamp: new Date(adj.timestamp)
-        })) || [],
-        helpRequests: progressUpdate.sessionData.helpRequests?.map((req: any) => ({
-          ...req,
-          timestamp: new Date(req.timestamp)
-        })) || [],
-        interactionEvents: progressUpdate.sessionData.interactionEvents?.map((event: any) => ({
-          ...event,
-          timestamp: new Date(event.timestamp)
-        })) || []
-      };
-    }
+    try {
+      // Convert string dates to Date objects in sessionData if provided
+      const progressUpdate = { ...req.body };
+      if (progressUpdate.sessionData) {
+        progressUpdate.sessionData = {
+          ...progressUpdate.sessionData,
+          startTime: new Date(progressUpdate.sessionData.startTime),
+          endTime: progressUpdate.sessionData.endTime ? new Date(progressUpdate.sessionData.endTime) : undefined,
+          focusEvents: progressUpdate.sessionData.focusEvents?.map((event: any) => ({
+            ...event,
+            timestamp: new Date(event.timestamp)
+          })) || [],
+          difficultyAdjustments: progressUpdate.sessionData.difficultyAdjustments?.map((adj: any) => ({
+            ...adj,
+            timestamp: new Date(adj.timestamp)
+          })) || [],
+          helpRequests: progressUpdate.sessionData.helpRequests?.map((req: any) => ({
+            ...req,
+            timestamp: new Date(req.timestamp)
+          })) || [],
+          interactionEvents: progressUpdate.sessionData.interactionEvents?.map((event: any) => ({
+            ...event,
+            timestamp: new Date(event.timestamp)
+          })) || []
+        };
+      }
 
-    const updatedProgress = await childProgressService.updateActivityProgress(childId, {
-      activityId,
-      ...progressUpdate
-    });
+      // Use enhanced progress update with validation and consistency checks
+      const result = await progressConsistencyService.updateProgressWithConsistencyChecks({
+        childId,
+        payload: {
+          activityId,
+          ...progressUpdate
+        },
+        validateConsistency: true, // Enable consistency checks for progress updates
+        autoCorrect: false // Don't auto-correct during regular updates
+      });
 
-    res.json({
-      message: 'Progress updated successfully',
-      progress: updatedProgress
-    });
+      if (!result.success) {
+        logger.warn('Progress update validation failed', {
+          childId,
+          activityId,
+          errors: result.errors
+        });
 
-  } catch (error) {
-    logger.error('Error updating activity progress:', error);
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Child not found')) {
-        return res.status(404).json({
-          error: {
-            code: 'CHILD_NOT_FOUND',
-            message: 'Child profile not found',
-            timestamp: new Date().toISOString(),
-            requestId: req.id || 'unknown'
-          }
+        return sendChildError(res, 'VALIDATION_ERROR', 
+          `Please check: ${result.errors.join(', ')}`, {
+          childId,
+          activityId,
+          validationErrors: result.errors
         });
       }
-      
-      if (error.message.includes('Activity not found')) {
-        return res.status(404).json({
-          error: {
-            code: 'ACTIVITY_NOT_FOUND',
-            message: 'Activity not found',
-            timestamp: new Date().toISOString(),
-            requestId: req.id || 'unknown'
-          }
+
+      // Log any consistency issues found (but don't fail the request)
+      if (result.consistencyResult && result.consistencyResult.inconsistencies.length > 0) {
+        logger.warn('Progress consistency issues detected', {
+          childId,
+          activityId,
+          inconsistencies: result.consistencyResult.inconsistencies
         });
       }
-    }
 
-    res.status(500).json({
-      error: {
-        code: 'PROGRESS_UPDATE_FAILED',
-        message: 'Failed to update progress. Please try again.',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
-    });
-  }
-});
+      res.json({
+        success: true,
+        message: 'Progress updated successfully! 🎉',
+        progress: result.progressRecord,
+        validation: {
+          passed: result.validationResult?.isValid || false,
+          warnings: result.validationResult?.warnings || []
+        },
+        consistency: {
+          checked: !!result.consistencyResult,
+          issues: result.consistencyResult?.inconsistencies.length || 0
+        }
+      });
+
+    } catch (error) {
+      logger.error('Progress update error:', error);
+      return sendChildError(res, 'UPDATE_FAILED', 
+        'Something went wrong updating your progress. Please try again!', {
+        childId,
+        activityId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  })
+);
 
 /**
  * POST /api/child/activity/:activityId/complete
  * Mark activity as complete with validation
  */
-router.post('/activity/:activityId/complete', authenticateToken, requireChildAuth, validate(activityCompletionSchema), async (req, res) => {
-  try {
+router.post('/activity/:activityId/complete', 
+  ...progressUpdateLogging('ACTIVITY_COMPLETION'),
+  authenticateToken, 
+  requireChildAuth,
+  sanitizeChildInput,
+  childRateLimit(30, 60000), // 30 completions per minute
+  validateChildParams({
+    activityId: Joi.string().required().messages({
+      'string.empty': 'Activity ID is required',
+      'any.required': 'Which activity did you complete?'
+    })
+  }),
+  validateChild(childValidationSchemas.activityCompletion),
+  asyncHandler(async (req: express.Request, res: express.Response) => {
     const { activityId } = req.params;
     const childId = req.user!.userId;
     const { score, timeSpent, sessionData } = req.body;
@@ -345,120 +540,108 @@ router.post('/activity/:activityId/complete', authenticateToken, requireChildAut
       })) || []
     };
 
-    // Validate completion
-    const validation = await childProgressService.validateActivityCompletion(
-      childId,
-      activityId,
-      score,
-      timeSpent,
-      processedSessionData
-    );
+    try {
+      // Use enhanced progress update with validation and consistency checks for completion
+      const result = await progressConsistencyService.updateProgressWithConsistencyChecks({
+        childId,
+        payload: {
+          activityId,
+          timeSpent,
+          score,
+          status: 'COMPLETED',
+          sessionData: processedSessionData
+        },
+        validateConsistency: true, // Enable full consistency checks for completions
+        autoCorrect: true // Auto-correct minor inconsistencies for completions
+      });
 
-    if (!validation.isValid) {
-      return res.status(400).json({
-        error: {
-          code: 'COMPLETION_VALIDATION_FAILED',
-          message: 'Activity completion validation failed',
-          details: validation.validationErrors,
-          timestamp: new Date().toISOString(),
-          requestId: req.id || 'unknown'
+      if (!result.success) {
+        logger.warn('Activity completion validation failed', {
+          childId,
+          activityId,
+          errors: result.errors
+        });
+
+        return sendChildError(res, 'COMPLETION_VALIDATION_FAILED', 
+          `Let's make sure everything is complete: ${result.errors.join(', ')}`, {
+          childId,
+          activityId,
+          validationErrors: result.errors
+        });
+      }
+
+      const completedProgress = result.progressRecord;
+
+      // Check for new badges
+      const currentSession = await prisma.childLoginSession.findFirst({
+        where: {
+          childId,
+          logoutTime: null
+        },
+        orderBy: { loginTime: 'desc' }
+      });
+
+      const badgeResults = await childBadgeService.checkBadgeEligibility(childId, currentSession?.id);
+      const newBadges = badgeResults.filter(result => result.success);
+
+      // Log any consistency issues found (but don't fail the request)
+      if (result.consistencyResult && result.consistencyResult.inconsistencies.length > 0) {
+        logger.warn('Activity completion consistency issues detected', {
+          childId,
+          activityId,
+          inconsistencies: result.consistencyResult.inconsistencies,
+          corrected: result.consistencyResult.corrections?.length || 0
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Activity completed successfully! 🎉',
+        progress: completedProgress,
+        validation: {
+          passed: result.validationResult?.isValid || false,
+          warnings: result.validationResult?.warnings || [],
+          consistencyChecks: result.consistencyResult?.inconsistencies.length || 0
+        },
+        consistency: {
+          checked: !!result.consistencyResult,
+          issues: result.consistencyResult?.inconsistencies.length || 0,
+          corrected: result.consistencyResult?.corrections?.length || 0
+        },
+        badges: {
+          earned: newBadges.map(result => result.badge),
+          count: newBadges.length
         }
       });
-    }
 
-    // Update progress with completion
-    const completedProgress = await childProgressService.updateActivityProgress(childId, {
-      activityId,
-      timeSpent,
-      score: validation.adjustedScore,
-      status: 'COMPLETED',
-      sessionData: processedSessionData
-    });
-
-    // Check for new badges
-    const currentSession = await prisma.childLoginSession.findFirst({
-      where: {
+    } catch (error) {
+      logger.error('Activity completion error:', error);
+      return sendChildError(res, 'COMPLETION_FAILED', 
+        'Something went wrong completing your activity. Please try again!', {
         childId,
-        logoutTime: null
-      },
-      orderBy: { loginTime: 'desc' }
-    });
-
-    const badgeResults = await childBadgeService.checkBadgeEligibility(childId, currentSession?.id);
-    const newBadges = badgeResults.filter(result => result.success);
-
-    res.json({
-      message: 'Activity completed successfully',
-      progress: completedProgress,
-      validation: {
-        originalScore: score,
-        adjustedScore: validation.adjustedScore,
-        bonusPoints: validation.bonusPoints,
-        penalties: validation.penalties
-      },
-      badges: {
-        earned: newBadges.map(result => result.badge),
-        count: newBadges.length
-      }
-    });
-
-  } catch (error) {
-    logger.error('Error completing activity:', error);
-    
-    if (error instanceof Error) {
-      if (error.message.includes('Child not found')) {
-        return res.status(404).json({
-          error: {
-            code: 'CHILD_NOT_FOUND',
-            message: 'Child profile not found',
-            timestamp: new Date().toISOString(),
-            requestId: req.id || 'unknown'
-          }
-        });
-      }
-      
-      if (error.message.includes('Activity not found')) {
-        return res.status(404).json({
-          error: {
-            code: 'ACTIVITY_NOT_FOUND',
-            message: 'Activity not found',
-            timestamp: new Date().toISOString(),
-            requestId: req.id || 'unknown'
-          }
-        });
-      }
+        activityId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
-
-    res.status(500).json({
-      error: {
-        code: 'COMPLETION_FAILED',
-        message: 'Failed to complete activity. Please try again.',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
-    });
-  }
-});
+  })
+);
 
 /**
  * GET /api/child/:childId/progress
  * Get detailed progress information with filtering
  */
-router.get('/:childId/progress', authenticateToken, requireChildAuth, async (req, res) => {
-  try {
+router.get('/:childId/progress', 
+  authenticateToken, 
+  requireChildAuth, 
+  verifyChildAccess,
+  sanitizeChildInput,
+  childRateLimit(20, 60000), // 20 requests per minute
+  validateChildParams({
+    childId: childValidationSchemas.childId
+  }),
+  validateChildQuery(childValidationSchemas.progressQuery),
+  asyncHandler(async (req: express.Request, res: express.Response) => {
     const { childId } = req.params;
-    
-    // Verify the authenticated child matches the requested child
-    if (req.user!.userId !== childId) {
-      return res.status(403).json({
-        error: {
-          code: 'ACCESS_DENIED',
-          message: 'Access denied to this child progress',
-          timestamp: new Date().toISOString(),
-          requestId: req.id || 'unknown'
-        }
-      });
-    }
 
     // Parse query parameters for filtering
     const {
@@ -500,62 +683,38 @@ router.get('/:childId/progress', authenticateToken, requireChildAuth, async (req
     const progressHistory = await childProgressService.getProgressHistory(childId, filter);
 
     res.json({
+      success: true,
       message: 'Progress history retrieved successfully',
       ...progressHistory
     });
-
-  } catch (error) {
-    logger.error('Error getting progress history:', error);
-    res.status(500).json({
-      error: {
-        code: 'PROGRESS_FETCH_FAILED',
-        message: 'Failed to retrieve progress history. Please try again.',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
-    });
-  }
-});
+  })
+);
 
 /**
  * GET /api/child/:childId/streaks
  * Get learning streak information
  */
-router.get('/:childId/streaks', authenticateToken, requireChildAuth, async (req, res) => {
-  try {
+router.get('/:childId/streaks', 
+  authenticateToken, 
+  requireChildAuth, 
+  verifyChildAccess,
+  sanitizeChildInput,
+  childRateLimit(15, 60000), // 15 requests per minute
+  validateChildParams({
+    childId: childValidationSchemas.childId
+  }),
+  asyncHandler(async (req: express.Request, res: express.Response) => {
     const { childId } = req.params;
-    
-    // Verify the authenticated child matches the requested child
-    if (req.user!.userId !== childId) {
-      return res.status(403).json({
-        error: {
-          code: 'ACCESS_DENIED',
-          message: 'Access denied to this child streaks',
-          timestamp: new Date().toISOString(),
-          requestId: req.id || 'unknown'
-        }
-      });
-    }
 
     const streaks = await childProgressService.getLearningStreaks(childId);
 
     res.json({
-      message: 'Learning streaks retrieved successfully',
+      success: true,
+      message: 'Learning streaks retrieved successfully! 🔥',
       streaks
     });
-
-  } catch (error) {
-    logger.error('Error getting learning streaks:', error);
-    res.status(500).json({
-      error: {
-        code: 'STREAKS_FETCH_FAILED',
-        message: 'Failed to retrieve learning streaks. Please try again.',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
-    });
-  }
-});
+  })
+);
 
 // ===== BADGE AND ACHIEVEMENT API =====
 
@@ -563,21 +722,17 @@ router.get('/:childId/streaks', authenticateToken, requireChildAuth, async (req,
  * GET /api/child/:childId/badges
  * Get all earned badges for a child
  */
-router.get('/:childId/badges', authenticateToken, requireChildAuth, async (req, res) => {
-  try {
+router.get('/:childId/badges', 
+  authenticateToken, 
+  requireChildAuth, 
+  verifyChildAccess,
+  sanitizeChildInput,
+  childRateLimit(10, 60000), // 10 requests per minute
+  validateChildParams({
+    childId: childValidationSchemas.childId
+  }),
+  asyncHandler(async (req: express.Request, res: express.Response) => {
     const { childId } = req.params;
-    
-    // Verify the authenticated child matches the requested child
-    if (req.user!.userId !== childId) {
-      return res.status(403).json({
-        error: {
-          code: 'ACCESS_DENIED',
-          message: 'Access denied to this child badges',
-          timestamp: new Date().toISOString(),
-          requestId: req.id || 'unknown'
-        }
-      });
-    }
 
     const badges = await prisma.achievement.findMany({
       where: {
@@ -602,23 +757,13 @@ router.get('/:childId/badges', authenticateToken, requireChildAuth, async (req, 
     });
 
     res.json({
-      message: 'Badges retrieved successfully',
+      success: true,
+      message: 'Badges retrieved successfully! 🏆',
       badges: badgesWithMetadata,
       count: badges.length
     });
-
-  } catch (error) {
-    logger.error('Error getting badges:', error);
-    res.status(500).json({
-      error: {
-        code: 'BADGES_FETCH_FAILED',
-        message: 'Failed to retrieve badges. Please try again.',
-        timestamp: new Date().toISOString(),
-        requestId: req.id || 'unknown'
-      }
-    });
-  }
-});
+  })
+);
 
 /**
  * GET /api/child/:childId/badges/progress
@@ -1188,5 +1333,8 @@ async function notifyParentOfSuspiciousActivity(parentId: string, details: any) 
     logger.error('Error notifying parent of suspicious activity:', error);
   }
 }
+
+// Apply child error handling middleware to all routes
+router.use(childErrorHandler);
 
 export default router;

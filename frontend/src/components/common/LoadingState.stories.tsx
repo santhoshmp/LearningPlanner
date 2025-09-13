@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import LoadingState from './LoadingState';
+import { LoadingState } from './index';
 import { ThemeProvider } from '../../theme/ThemeContext';
 
 const meta: Meta<typeof LoadingState> = {

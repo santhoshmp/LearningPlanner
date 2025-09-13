@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Box, 
-  Typography, 
-  Button, 
-  Paper, 
-  Container, 
-  IconButton, 
+import {
+  Box,
+  Typography,
+  Button,
+  Paper,
+  Container,
+  IconButton,
   CircularProgress,
-  Alert,
   Card,
-  CardContent,
-  Fade
-} from '@mui/material';
-import { ArrowBack, Pause, PlayArrow, Help } from '@mui/icons-material';
+  CardContent} from '@mui/material';
+import { ArrowBack, Pause, PlayArrow } from '@mui/icons-material';
 import { StudyActivity } from '../../types/studyPlan';
 import { ActivityProgress, ActivityState, ActivitySubmission } from '../../types/activity';
-import { activityApi, studyPlanApi, claudeApi } from '../../services/api';
+import { activityApi, studyPlanApi, claudeApi, childDashboardApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { gamificationService } from '../../services/gamificationService';
 import { CelebrationConfig } from '../../types/gamification';
 import ProgressBar from './ProgressBar';
@@ -31,7 +29,8 @@ const ActivityPlayer: React.FC = () => {
   const { planId, activityId } = useParams<{ planId: string; activityId?: string }>();
   const navigate = useNavigate();
   const { theme } = useTheme();
-  
+  const { user, isChild } = useAuth();
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<{
@@ -61,7 +60,7 @@ const ActivityPlayer: React.FC = () => {
   // Timer for tracking time spent
   useEffect(() => {
     let interval: number | null = null;
-    
+
     if (!activityState.isPaused && currentActivity) {
       interval = window.setInterval(() => {
         setActivityState(prev => ({
@@ -70,7 +69,7 @@ const ActivityPlayer: React.FC = () => {
         }));
       }, 1000);
     }
-    
+
     return () => {
       if (interval) clearInterval(interval);
     };
@@ -82,45 +81,52 @@ const ActivityPlayer: React.FC = () => {
       try {
         setIsLoading(true);
         setError(null);
-        
+
         if (!planId) {
           throw new Error('Plan ID is required');
         }
-        
-        // Load the study plan
-        const planData = await studyPlanApi.getPlan(planId);
+
+        // Load the study plan using appropriate API based on user role
+        let planData;
+        if (isChild && user?.id) {
+          // Use child-specific API
+          planData = await childDashboardApi.getStudyPlan(user.id, planId);
+        } else {
+          // Use parent API (fallback)
+          planData = await studyPlanApi.getPlan(planId);
+        }
         setPlan(planData);
-        
+
         // Determine which activity to load
         let targetActivityId = activityId;
         if (!targetActivityId && planData.activities.length > 0) {
           // If no activity ID is provided, load the first activity or the first incomplete one
-          const incompleteActivity = planData.activities.find((activity: StudyActivity) => {
+          const incompleteActivity = planData.activities.find(() => {
             // This would require backend integration to check completion status
             // For now, just load the first activity
             return true;
           });
-          
+
           targetActivityId = incompleteActivity?.id || planData.activities[0].id;
           navigate(`/child/plan/${planId}/activity/${targetActivityId}`, { replace: true });
         }
-        
+
         if (targetActivityId) {
           // Load the activity
           const activity = planData.activities.find((a: StudyActivity) => a.id === targetActivityId);
           if (!activity) {
             throw new Error('Activity not found');
           }
-          
+
           setCurrentActivity(activity);
-          
+
           // Try to load existing progress
           try {
             const progress = await activityApi.getActivityProgress(targetActivityId);
             setActivityProgress(progress);
-            
+
             // If activity was in progress, restore state
-            if (progress.status === 'in_progress') {
+            if (progress.status === 'IN_PROGRESS') {
               // This would require storing and retrieving the actual state from the backend
               // For now, just set the start time based on the progress
               setActivityState(prev => ({
@@ -128,7 +134,7 @@ const ActivityPlayer: React.FC = () => {
                 startTime: Date.now() - (progress.timeSpent * 1000),
                 elapsedTime: progress.timeSpent
               }));
-            } else if (progress.status === 'not_started') {
+            } else if (progress.status === 'NOT_STARTED') {
               // Start the activity
               await activityApi.startActivity(targetActivityId);
             }
@@ -136,12 +142,12 @@ const ActivityPlayer: React.FC = () => {
             // If no progress exists, create a new progress record
             await activityApi.startActivity(targetActivityId);
           }
-          
+
           // Set total steps based on activity content
           setActivityState(prev => ({
             ...prev,
-            totalSteps: activity.content.type === 'quiz' 
-              ? activity.content.data.questions.length 
+            totalSteps: activity.content.type === 'quiz'
+              ? activity.content.data.questions.length
               : 1
           }));
         }
@@ -152,7 +158,7 @@ const ActivityPlayer: React.FC = () => {
         setIsLoading(false);
       }
     };
-    
+
     loadData();
   }, [planId, activityId, navigate]);
 
@@ -163,7 +169,7 @@ const ActivityPlayer: React.FC = () => {
         saveProgress();
       }
     }, 30000); // Save every 30 seconds
-    
+
     return () => clearInterval(saveProgressInterval);
   }, [currentActivity, activityProgress, activityState]);
 
@@ -178,12 +184,11 @@ const ActivityPlayer: React.FC = () => {
 
   const saveProgress = useCallback(async () => {
     if (!currentActivity || !activityProgress) return;
-    
+
     try {
       await activityApi.updateProgress(currentActivity.id, {
-        status: 'in_progress',
-        timeSpent: activityState.elapsedTime,
-        lastInteractionAt: new Date().toISOString()
+        status: 'IN_PROGRESS',
+        timeSpent: Math.floor(activityState.elapsedTime / 60) // Convert seconds to minutes
       });
     } catch (err) {
       console.error('Failed to save progress:', err);
@@ -237,7 +242,7 @@ const ActivityPlayer: React.FC = () => {
 
   const handleRequestHelp = async (question: string) => {
     if (!currentActivity || !plan) return Promise.reject(new Error('No activity loaded'));
-    
+
     try {
       // Use the Claude AI service for help requests
       const helpRequest = await claudeApi.requestHelp({
@@ -260,7 +265,7 @@ const ActivityPlayer: React.FC = () => {
 
   const handleActivityCompletion = async () => {
     if (!currentActivity) return;
-    
+
     try {
       const submission: ActivitySubmission = {
         activityId: currentActivity.id,
@@ -268,21 +273,35 @@ const ActivityPlayer: React.FC = () => {
         timeSpent: activityState.elapsedTime,
         helpRequests: [] // In a real implementation, we would track help requests
       };
-      
+
       const result = await activityApi.submitActivity(currentActivity.id, submission);
       setCompletionResult(result);
-      
+
+      // Update activity progress state to reflect completion
+      setActivityProgress(prev => ({
+        ...prev,
+        status: 'COMPLETED',
+        score: result.score,
+        completedAt: new Date().toISOString()
+      }));
+
+      // Update activity state to show completion
+      setActivityState(prev => ({
+        ...prev,
+        isCompleted: true
+      }));
+
       // Check if any achievements were earned
       if (result.achievements && result.achievements.length > 0) {
         // Find the most significant achievement (milestone > badge > streak)
-        const significantAchievement = result.achievements.find(a => a.type === 'milestone') || 
-                                      result.achievements.find(a => a.type === 'badge') || 
-                                      result.achievements[0];
-        
+        const significantAchievement = result.achievements.find(a => a.type === 'milestone') ||
+          result.achievements.find(a => a.type === 'badge') ||
+          result.achievements[0];
+
         // Get celebration config for the achievement
         const celebrationConfig = gamificationService.getCelebrationConfig(significantAchievement);
         setCelebration(celebrationConfig);
-        
+
         // Show celebration animation before completion modal
         setTimeout(() => {
           setCelebration(null);
@@ -299,7 +318,7 @@ const ActivityPlayer: React.FC = () => {
 
   const handleContinue = () => {
     setShowCompletionModal(false);
-    
+
     // Navigate to the next activity if available
     if (completionResult?.nextActivityId) {
       navigate(`/child/plan/${planId}/activity/${completionResult.nextActivityId}`);
@@ -311,11 +330,11 @@ const ActivityPlayer: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Box 
-        sx={{ 
-          minHeight: '100vh', 
-          display: 'flex', 
-          alignItems: 'center', 
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
           background: theme.palette.primary.light
         }}
@@ -332,11 +351,11 @@ const ActivityPlayer: React.FC = () => {
 
   if (error) {
     return (
-      <Box 
-        sx={{ 
-          minHeight: '100vh', 
-          display: 'flex', 
-          alignItems: 'center', 
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
           bgcolor: 'background.default'
         }}
@@ -346,8 +365,8 @@ const ActivityPlayer: React.FC = () => {
             <Typography color="error" sx={{ fontSize: '4rem', mb: 2 }}>😕</Typography>
             <Typography variant="h4" gutterBottom>Oops! Something went wrong</Typography>
             <Typography color="text.secondary" sx={{ mb: 4 }}>{error}</Typography>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               color="primary"
               onClick={() => navigate('/child/dashboard')}
             >
@@ -361,11 +380,11 @@ const ActivityPlayer: React.FC = () => {
 
   if (!currentActivity) {
     return (
-      <Box 
-        sx={{ 
-          minHeight: '100vh', 
-          display: 'flex', 
-          alignItems: 'center', 
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
           bgcolor: 'background.default'
         }}
@@ -377,8 +396,8 @@ const ActivityPlayer: React.FC = () => {
             <Typography color="text.secondary" sx={{ mb: 4 }}>
               We couldn't find the activity you're looking for.
             </Typography>
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               color="primary"
               onClick={() => navigate('/child/dashboard')}
             >
@@ -392,10 +411,10 @@ const ActivityPlayer: React.FC = () => {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <Paper 
-        elevation={4} 
-        sx={{ 
-          bgcolor: 'primary.main', 
+      <Paper
+        elevation={4}
+        sx={{
+          bgcolor: 'primary.main',
           color: 'primary.contrastText',
           borderRadius: { xs: 0, sm: '0 0 24px 24px' }
         }}
@@ -403,8 +422,8 @@ const ActivityPlayer: React.FC = () => {
         <Container maxWidth="lg">
           <Box sx={{ py: 2, px: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <IconButton 
-                color="inherit" 
+              <IconButton
+                color="inherit"
                 onClick={() => navigate('/child/dashboard')}
                 sx={{ mr: 1 }}
               >
@@ -415,7 +434,7 @@ const ActivityPlayer: React.FC = () => {
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <HelpButton 
+              <HelpButton
                 onRequestHelp={handleRequestHelp}
                 activityId={currentActivity.id}
                 childAge={plan?.childProfile?.age || 10}
@@ -424,8 +443,7 @@ const ActivityPlayer: React.FC = () => {
                   subject: currentActivity.subject || 'general',
                   currentStep: activityState.currentStep,
                   currentContent: currentActivity.content?.data?.[activityState.currentStep]
-                }}
-              />
+                }} childId={''}              />
               {activityState.isPaused ? (
                 <Button
                   variant="contained"
@@ -464,9 +482,9 @@ const ActivityPlayer: React.FC = () => {
 
             {/* Progress Bar */}
             <Box sx={{ my: 3 }}>
-              <ProgressBar 
-                currentStep={activityState.currentStep + 1} 
-                totalSteps={activityState.totalSteps} 
+              <ProgressBar
+                currentStep={activityState.currentStep + 1}
+                totalSteps={activityState.totalSteps}
                 timeSpent={activityState.elapsedTime}
                 estimatedDuration={currentActivity.estimatedDuration}
               />
@@ -474,17 +492,18 @@ const ActivityPlayer: React.FC = () => {
 
             {/* Activity Content */}
             <Box sx={{ my: 4 }}>
-              <ActivityContent 
+              <ActivityContent
                 activity={currentActivity}
                 currentStep={activityState.currentStep}
                 answers={activityState.answers}
                 onAnswerChange={(answer) => handleAnswerChange(activityState.currentStep, answer)}
+                onComplete={handleActivityCompletion}
               />
             </Box>
 
             {/* Navigation Controls */}
             <Box sx={{ mt: 4 }}>
-              <ActivityNavigation 
+              <ActivityNavigation
                 currentStep={activityState.currentStep}
                 totalSteps={activityState.totalSteps}
                 onPrevious={handlePrevStep}
@@ -498,12 +517,12 @@ const ActivityPlayer: React.FC = () => {
 
       {/* Celebration Animation */}
       {celebration && (
-        <CelebrationAnimation 
+        <CelebrationAnimation
           config={celebration}
           onComplete={() => setCelebration(null)}
         />
       )}
-      
+
       {/* Completion Modal */}
       {showCompletionModal && completionResult && (
         <ActivityCompletionModal

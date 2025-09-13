@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LoadingState } from '../common/LoadingState';
-import { ErrorState } from '../common/ErrorState';
+import { LoadingState } from '../common';
+import { ErrorState } from '../common';
 
 interface ChildAuthGuardProps {
   children: React.ReactNode;
@@ -27,7 +27,7 @@ export const ChildAuthGuard: React.FC<ChildAuthGuardProps> = ({
   requireActiveSession = true,
   maxSessionDuration = 20
 }) => {
-  const { user, isAuthenticated, isLoading, isChild, userRole } = useAuth();
+  const { user, isAuthenticated, isLoading, isChild } = useAuth();
   const location = useLocation();
   const [sessionInfo, setSessionInfo] = useState<ChildSessionInfo | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);

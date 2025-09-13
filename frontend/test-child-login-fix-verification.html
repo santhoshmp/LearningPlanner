@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Child Login Fix Verification</title>
+</head>
+<body>
+    <h1>Child Login Fix Verification</h1>
+    <div id="status">Ready to test...</div>
+    <button onclick="testLogin()">Test Child Login</button>
+    <button onclick="clearStorage()">Clear Storage</button>
+    
+    <script>
+        function clearStorage() {
+            localStorage.clear();
+            document.getElementById('status').innerHTML = 'Storage cleared!';
+        }
+        
+        async function testLogin() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                // First, add some corrupted data to simulate the issue
+                localStorage.setItem('accessToken', 'corrupted_token');
+                localStorage.setItem('user', 'invalid_json');
+                statusDiv.innerHTML = 'Added corrupted data, testing login...';
+                
+                // Test the API directly (simulating what the frontend does)
+                const response = await fetch('http://localhost:3001/api/auth/child/login-legacy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+      

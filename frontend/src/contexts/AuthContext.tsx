@@ -59,7 +59,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         logout();
       },
       onContactHelp: () => {
-        const helpMessage = isChild 
+        const helpMessage = isChild
           ? 'Please ask a grown-up to help you! 👨‍👩‍👧‍👦'
           : 'Please contact support for assistance.';
         toast.error(helpMessage);
@@ -79,23 +79,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       clearError();
       console.log('Attempting parent login with:', { email: credentials.email });
-      
+
       const result: AuthResult = await ChildAuthErrorHandler.withNetworkRetry(
         () => authApi.login(credentials)
       );
       console.log('Parent login successful, result:', result);
-      
+
       // Create and save session using SessionManager
       const sessionData = SessionManager.createSessionFromAuthResult(result);
       SessionManager.saveSession(sessionData);
-      
+
       setUser(result.user);
       setUserRole(sessionData.userRole);
       toast.success('Login successful!');
     } catch (error: any) {
       console.error('Parent login error:', error);
       const authError = handleAuthError(error);
-      
+
       // Show child-friendly or parent-appropriate error message
       const errorMessage = authError.userFriendlyMessage;
       toast.error(errorMessage);
@@ -154,15 +154,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      // Check for session corruption
+      // Check for session corruption - but only if there's partial data (real corruption)
+      console.log('🔧 refreshAuth: Checking for session corruption...');
       const corruptionIssues = ChildAuthErrorHandler.getSessionCorruptionIssues();
-      if (corruptionIssues.length > 0) {
-        console.warn('Session corruption detected:', corruptionIssues);
+      console.log('🔧 refreshAuth: Corruption check result:', corruptionIssues);
+
+      // Check if localStorage is completely empty (normal for new users)
+      const hasAnySessionData = localStorage.getItem('accessToken') ||
+        localStorage.getItem('refreshToken') ||
+        localStorage.getItem('user') ||
+        localStorage.getItem('userRole');
+
+      if (corruptionIssues.length > 0 && hasAnySessionData) {
+        console.warn('🔧 Session corruption detected (partial data found):', corruptionIssues);
+        console.log('🔧 Current localStorage state:', {
+          accessToken: localStorage.getItem('accessToken'),
+          refreshToken: localStorage.getItem('refreshToken'),
+          user: localStorage.getItem('user'),
+          userRole: localStorage.getItem('userRole')
+        });
         ChildAuthErrorHandler.cleanCorruptedSession();
         setUser(null);
         setUserRole(null);
         setIsLoading(false);
         return;
+      } else if (corruptionIssues.length > 0 && !hasAnySessionData) {
+        console.log('🔧 Empty localStorage detected (normal for new users) - skipping corruption cleanup');
       }
 
       // Try to repair corrupted session first
@@ -228,7 +245,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const result: AuthResult = await ChildAuthErrorHandler.withNetworkRetry(
             () => authApi.refreshToken(sessionData.refreshToken!)
           );
-          
+
           // Validate refresh result
           if (!ChildAuthErrorHandler.validateSession({
             user: result.user,
@@ -238,18 +255,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           })) {
             throw new Error('Invalid refresh token result');
           }
-          
+
           // Update session with new tokens
           const updatedSessionData = SessionManager.createSessionFromAuthResult(result);
           SessionManager.saveSession(updatedSessionData);
-          
+
           setUser(result.user);
           setUserRole(updatedSessionData.userRole);
           console.log('Parent authentication refreshed successfully');
         } catch (refreshError: any) {
           console.error('Token refresh failed:', refreshError);
           const authError = handleAuthError(refreshError);
-          
+
           // Handle refresh failure based on error type
           if (refreshError.response?.status === 401 || refreshError.response?.status === 403) {
             // Definitive auth failure - clear session
@@ -279,7 +296,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Error during authentication refresh:', error);
       const authError = handleAuthError(error);
-      
+
       // On any unexpected error, clear session to prevent loops
       SessionManager.clearSession();
       setUser(null);
@@ -299,39 +316,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       clearError();
       console.log('Attempting child login with:', { username });
+
+      // Always clean any existing session data before login to prevent interference
+      console.log('Cleaning any existing session data before login...');
+      ChildAuthErrorHandler.cleanCorruptedSession();
       
       // Check for authentication loops before attempting login
       if (ChildAuthErrorHandler.isLoopDetected()) {
         console.warn('Authentication loop detected, resetting');
         ChildAuthErrorHandler.resetLoopDetection();
-        ChildAuthErrorHandler.cleanCorruptedSession();
       }
-      
+
       const result: AuthResult = await ChildAuthErrorHandler.withNetworkRetry(
         () => authApi.childLogin(username, pin)
       );
       console.log('Child login successful, result:', result);
-      
+
       // Validate the result before proceeding
-      if (!ChildAuthErrorHandler.validateSession({ 
-        user: result.user, 
+      if (!ChildAuthErrorHandler.validateSession({
+        user: result.user,
         userRole: result.user.role === 'CHILD' ? 'child' : 'parent',
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken 
+        refreshToken: result.refreshToken
       })) {
         throw new Error('Invalid authentication result received');
       }
-      
+
       // Create and save session using SessionManager
       const sessionData = SessionManager.createSessionFromAuthResult(result);
       SessionManager.saveSession(sessionData);
-      
+
       setUser(result.user);
       setUserRole(sessionData.userRole);
-      
+
       // Reset loop detection on successful login
       ChildAuthErrorHandler.resetLoopDetection();
-      
+
       toast.success('Welcome back!', {
         icon: '👋',
         style: {
@@ -343,7 +363,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error: any) {
       console.error('Child login error:', error);
       const authError = handleAuthError(error);
-      
+
       toast.error(authError.userFriendlyMessage, {
         icon: '😕',
         style: {

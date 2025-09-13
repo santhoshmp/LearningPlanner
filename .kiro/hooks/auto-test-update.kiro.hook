@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Auto Test Update",
+  "description": "Automatically updates test scripts when source code files are modified to ensure tests remain synchronized with implementation changes",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "backend/src/**/*.ts",
+      "frontend/src/**/*.tsx",
+      "frontend/src/**/*.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A source code file has been modified. Please analyze the changes and update the corresponding test files to ensure they cover the new functionality, modified behavior, or removed features. Focus on:\n\n1. Identifying which test files need updates based on the changed source file\n2. Adding new test cases for any new functions, methods, or components\n3. Updating existing test cases that may be affected by the changes\n4. Removing obsolete tests for deleted functionality\n5. Ensuring test coverage remains comprehensive\n6. Maintaining test quality and following existing testing patterns\n\nPlease provide specific recommendations for test file updates and generate the necessary test code changes."
+  }
+}

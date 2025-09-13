@@ -85,6 +85,7 @@ model StudyPlan {
   child             ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
   activities        StudyActivity[]
 
+  @@index([childId])
   @@map("study_plans")
 }
 
@@ -782,4 +783,96 @@ model LearningStreak {
   @@index([streakType])
   @@index([isActive])
   @@map("learning_streaks")
+}
+// Study Plan Logging Models
+model StudyPlanAccessLog {
+  id                    String              @id @default(cuid())
+  childId               String
+  planId                String?
+  activityId            String?
+  action                String              // ACCESS_PLANS, ACCESS_PLAN, ACCESS_ACTIVITY, etc.
+  success               Boolean
+  responseTime          Int?                // in milliseconds
+  errorCode             String?
+  errorMessage          String?
+  userAgent             String?
+  ipAddress             String?
+  sessionId             String?
+  metadata              String?             // JSON string for additional data
+  timestamp             DateTime            @default(now())
+  createdAt             DateTime            @default(now())
+
+  @@index([childId, timestamp])
+  @@index([action, success])
+  @@index([timestamp])
+  @@map("study_plan_access_logs")
+}
+
+model ProgressUpdateLog {
+  id                    String              @id @default(cuid())
+  childId               String
+  activityId            String
+  planId                String?
+  action                String              // PROGRESS_UPDATE, ACTIVITY_COMPLETION, STREAK_UPDATE
+  success               Boolean
+  previousStatus        String?
+  newStatus             String?
+  scoreChange           Float?
+  timeSpent             Int?                // in seconds
+  validationErrors      String?             // JSON array of validation errors
+  consistencyIssues     String?             // JSON array of consistency issues
+  responseTime          Int?                // in milliseconds
+  sessionData           String?             // JSON string of session data
+  timestamp             DateTime            @default(now())
+  createdAt             DateTime            @default(now())
+
+  @@index([childId, timestamp])
+  @@index([activityId, timestamp])
+  @@index([action, success])
+  @@index([timestamp])
+  @@map("progress_update_logs")
+}
+
+model DashboardAccessLog {
+  id                    String              @id @default(cuid())
+  childId               String
+  action                String              // DASHBOARD_ACCESS, PROGRESS_FETCH, STREAKS_FETCH, BADGES_FETCH
+  success               Boolean
+  studyPlansCount       Int?
+  progressRecordsCount  Int?
+  streaksCount          Int?
+  badgesCount           Int?
+  responseTime          Int?                // in milliseconds
+  cacheHit              Boolean?
+  errorCode             String?
+  errorMessage          String?
+  timestamp             DateTime            @default(now())
+  createdAt             DateTime            @default(now())
+
+  @@index([childId, timestamp])
+  @@index([action, success])
+  @@index([timestamp])
+  @@map("dashboard_access_logs")
+}
+
+model DatabasePerformanceLog {
+  id                    String              @id @default(cuid())
+  operation             String              // Operation name/description
+  tableName             String              // Database table involved
+  queryType             String              // SELECT, INSERT, UPDATE, DELETE, UPSERT
+  executionTime         Int                 // in milliseconds
+  recordsAffected       Int?
+  indexesUsed           String?             // JSON array of indexes used
+  queryComplexity       String?             // LOW, MEDIUM, HIGH
+  childId               String?
+  planId                String?
+  activityId            String?
+  timestamp             DateTime            @default(now())
+  createdAt             DateTime            @default(now())
+
+  @@index([operation, timestamp])
+  @@index([tableName, timestamp])
+  @@index([executionTime])
+  @@index([timestamp])
+  @@map("database_performance_logs")
 }

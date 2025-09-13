@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Child Routing Fix Verification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #4c51bf;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+        .success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+        .error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+        .warning { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+        .info { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+        
+        .test-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .test-button:active {
+            transform: translateY(0);
+        }
+        
+        .flow-diagram {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #dee2e6;
+        }
+        
+        .flow-step {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+        
+        .flow-step.success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        
+        .flow-step.error {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .step-number {
+            background: #6c757d;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-weight: bold;
+        }
+        
+        .step-number.success {
+            background: #28a745;
+        }
+        
+        .step-number.error {
+            background: #dc3545;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        
+        .routing-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .routing-table th,
+        .routing-table td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        .routing-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .routing-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Child Authentication Routing Fix Verification</h1>
+            <p>Testing the fix for child login routing issues</p>
+        </div>
+
+        <div class="status info">
+            <strong>🎯 Issue Fixed:</strong> Child users were being redirected back to parent login after successful authentication due to AuthContext state not being updated immediately.
+        </div>
+
+        <div class="test-section">
+            <h2>🔍 Current Routing Flow Analysis</h2>
+            
+            <div class="flow-diagram">
+                <h3>Expected Flow (After Fix):</h3>
+                <div class="flow-step success">
+                    <div class="step-number success">1</div>
+                    <div>
+                        <strong>Child Login Form:</strong> User enters credentials at <code>/child-login</code>
+                    </div>
+                </div>
+                <div class="flow-step success">
+                    <div class="step-number success">2</div>
+                    <div>
+                        <strong>Backend Authentication:</strong> API validates credentials and returns tokens
+                    </div>
+                </div>
+                <div class="flow-step success">
+                    <div class="step-number success">3</div>
+                    <div>
+                        <strong>Session Creation:</strong> SessionManager creates and saves session to localStorage
+                    </div>
+                </div>
+                <div class="flow-step success">
+                    <div class="step-number success">4</div>
+                    <div>
+                        <strong>AuthContext Update:</strong> <span class="highlight">setUser() and setUserRole() called immediately</span>
+                    </div>
+                </div>
+                <div class="flow-step success">
+                    <div class="step-number success">5</div>
+                    <div>
+                        <strong>Route Protection:</strong> ProtectedRoute sees authenticated child user
+                    </div>
+                </div>
+                <div class="flow-step success">
+                    <div class="step-number success">6</div>
+                    <div>
+                        <strong>Successful Redirect:</strong> User redirected to <code>/child-dashboard</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🛠️ Code Changes Made</h2>
+            
+            <h3>Before (Problematic):</h3>
+            <div class="code-block">// In AuthContext.tsx childLogin function
+const result = await authApi.childLogin(username, pin);
+SessionManager.saveSession(sessionData);
+
+// ❌ This was causing timing issues:
+refreshAuth(); // Async function, state not updated immediately</div>
+
+            <h3>After (Fixed):</h3>
+            <div class="code-block">// In AuthContext.tsx childLogin function
+const result = await authApi.childLogin(username, pin);
+const sessionData = SessionManager.createSessionFromAuthResult(result);
+SessionManager.saveSession(sessionData);
+
+// ✅ Direct state update:
+setUser(result.user);        // Immediate state update
+setUserRole(sessionData.userRole); // Immediate state update</div>
+        </div>
+
+        <div class="test-section">
+            <h2>🗺️ Routing Configuration</h2>
+            
+            <table class="routing-table">
+                <thead>
+                    <tr>
+                        <th>Route</th>
+                        <th>Component</th>
+                        <th>Protection</th>
+                        <th>User Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/child-login</code></td>
+                        <td>ChildLoginForm</td>
+                        <td>PublicRoute</td>
+                        <td>Unauthenticated</td>
+                    </tr>
+                    <tr style="background: #d4edda;">
+                        <td><code>/child-dashboard</code></td>
+                        <td>ChildDashboard</td>
+                        <td>ProtectedRoute</td>
+                        <td><strong>Child Users</strong></td>
+                    </tr>
+                    <tr>
+                        <td><code>/child/plan/:planId/activity/:activityId</code></td>
+                        <td>ActivityPlayer</td>
+                        <td>ProtectedRoute</td>
+                        <td>Child Users</td>
+                    </tr>
+                    <tr>
+                        <td><code>/child/achievements</code></td>
+                        <td>AchievementCenter</td>
+                        <td>ProtectedRoute</td>
+                        <td>Child Users</td>
+                    </tr>
+                    <tr>
+                        <td><code>/dashboard</code></td>
+                        <td>Dashboard</td>
+                        <td>ProtectedRoute</td>
+                        <td>Parent Users</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="test-section">
+            <h2>🧪 Test the Fix</h2>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="test-button" onclick="testChildLoginFlow()">
+                    🚀 Test Child Login Flow
+                </button>
+                <button class="test-button" onclick="checkAuthState()">
+                    🔍 Check Current Auth State
+                </button>
+                <button class="test-button" onclick="clearSessionAndTest()">
+                    🧹 Clear Session & Test Fresh
+                </button>
+                <button class="test-button" onclick="testRoutingLogic()">
+                    🗺️ Test Routing Logic
+                </button>
+            </div>
+
+            <div id="test-results">
+                <div class="status info">
+                    <strong>Ready to test!</strong> Click the buttons above to verify the routing fix.
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔑 Test Credentials</h2>
+            <div class="code-block">Username: testchild
+PIN: 1234</div>
+            
+            <div class="status warning">
+                <strong>Note:</strong> Make sure both backend (port 3001) and frontend (port 3000) servers are running before testing.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateResults(type, message) {
+            const resultsDiv = document.getElementById('test-results');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            resultsDiv.innerHTML = `
+                <div class="status ${type}">
+                    <strong>[${timestamp}]</strong> ${message}
+                </div>
+            `;
+        }
+
+        function testChildLoginFlow() {
+            updateResults('info', 'Opening child login page...');
+            
+            // Clear any existing session first
+            localStorage.clear();
+            
+            // Open child login page
+            const loginWindow = window.open('http://localhost:3000/child-login', '_blank');
+            
+            setTimeout(() => {
+                updateResults('success', `
+                    Child login page opened. Follow these steps:
+                    <br><br>
+                    <strong>1.</strong> Enter username: <code>testchild</code>
+                    <br><strong>2.</strong> Enter PIN: <code>1234</code>
+                    <br><strong>3.</strong> Click login
+                    <br><strong>4.</strong> Should redirect to <code>/child-dashboard</code> (NOT parent login)
+                    <br><br>
+                    <em>If you're redirected back to parent login, the fix didn't work.</em>
+                `);
+            }, 500);
+        }
+
+        function checkAuthState() {
+            const sessionData = {
+                accessToken: localStorage.getItem('accessToken'),
+                refreshToken: localStorage.getItem('refreshToken'),
+                user: localStorage.getItem('user'),
+                userRole: localStorage.getItem('userRole'),
+                loginTime: localStorage.getItem('loginTime')
+            };
+            
+            const hasSession = Object.values(sessionData).some(value => value !== null);
+            
+            if (hasSession) {
+                try {
+                    const user = JSON.parse(sessionData.user || '{}');
+                    updateResults('success', `
+                        ✅ <strong>Session Found:</strong>
+                        <br>• User: ${user.name || user.firstName || 'Unknown'}
+                        <br>• Role: ${sessionData.userRole}
+                        <br>• User ID: ${user.id || 'Unknown'}
+                        <br>• Login Time: ${sessionData.loginTime}
+                        <br>• Has Access Token: ${sessionData.accessToken ? 'Yes' : 'No'}
+                        <br>• Has Refresh Token: ${sessionData.refreshToken ? 'Yes' : 'No'}
+                    `);
+                } catch (e) {
+                    updateResults('warning', 'Session found but user data is corrupted: ' + e.message);
+                }
+            } else {
+                updateResults('info', 'No session found - user needs to log in');
+            }
+        }
+
+        function clearSessionAndTest() {
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            updateResults('success', 'Session cleared successfully. Now test the complete login flow.');
+            
+            setTimeout(() => {
+                testChildLoginFlow();
+            }, 1000);
+        }
+
+        function testRoutingLogic() {
+            updateResults('info', 'Testing routing logic...');
+            
+            // Simulate different authentication states
+            const tests = [
+                {
+                    name: 'Unauthenticated user accessing /child-dashboard',
+                    expected: 'Redirect to /child-login',
+                    url: 'http://localhost:3000/child-dashboard'
+                },
+                {
+                    name: 'Unauthenticated user accessing /dashboard',
+                    expected: 'Redirect to /login',
+                    url: 'http://localhost:3000/dashboard'
+                },
+                {
+                    name: 'Child login page access',
+                    expected: 'Show login form',
+                    url: 'http://localhost:3000/child-login'
+                }
+            ];
+            
+            let testResults = '<strong>Routing Logic Tests:</strong><br><br>';
+            
+            tests.forEach((test, index) => {
+                testResults += `
+                    <strong>${index + 1}.</strong> ${test.name}
+                    <br>Expected: ${test.expected}
+                    <br>Test URL: <a href="${test.url}" target="_blank">${test.url}</a>
+                    <br><br>
+                `;
+            });
+            
+            updateResults('info', testResults);
+        }
+
+        // Auto-check auth state on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthState();
+        });
+
+        // Monitor localStorage changes
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'user' || e.key === 'userRole') {
+                setTimeout(checkAuthState, 100);
+            }
+        });
+    </script>
+</body>
+</html>

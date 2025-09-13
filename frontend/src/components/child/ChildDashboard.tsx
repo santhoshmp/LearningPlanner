@@ -7,15 +7,17 @@ import { Achievement } from '../../types/activity';
 import SessionManager from './SessionManager';
 import { useMobileOptimizations } from '../../hooks/useMobileOptimizations';
 import { ResponsiveChildDashboard } from '../mobile/ResponsiveChildDashboard';
-import { LoadingState } from '../common/LoadingState';
-import { ErrorState } from '../common/ErrorState';
-import { ChildFriendlyErrorDisplay } from '../common/ChildFriendlyErrorDisplay';
+import { LoadingState, ErrorState, ChildFriendlyErrorDisplay } from '../common';
 import '../../styles/mobileOptimizations.css';
 
-// Enhanced dashboard data interfaces
+// Enhanced dashboard data interfaces matching the new API structure
 interface DashboardData {
   child: {
     id: string;
+    name?: string;
+    age?: number;
+    grade?: string;
+    skillProfile?: any;
   };
   progressSummary: {
     totalActivities: number;
@@ -23,37 +25,66 @@ interface DashboardData {
     inProgressActivities: number;
     totalTimeSpent: number;
     averageScore: number;
-    currentDailyStreak: number;
-    longestDailyStreak: number;
-    lastActivityDate: Date | null;
     weeklyGoalProgress: number;
     monthlyGoalProgress: number;
-  };
-  activeActivities: any[];
-  currentStreaks: Array<{
-    id: string;
-    streakType: string;
-    currentCount: number;
-    longestCount: number;
-    isActive: boolean;
     lastActivityDate: Date | null;
-  }>;
+    subjectProgress: any[];
+    // Streak data from the new API
+    currentDailyStreak: number;
+    longestDailyStreak: number;
+    activityCompletionStreak: number;
+    perfectScoreStreak: number;
+    helpFreeStreak: number;
+  };
   studyPlans: Array<StudyPlan & {
     totalActivities: number;
     completedActivities: number;
+    inProgressActivities: number;
     progressPercentage: number;
+    totalTimeSpent: number;
+    averageScore: number;
+  }>;
+  currentStreaks: Array<{
+    id: string;
+    type: string;
+    currentCount: number;
+    longestCount: number;
+    lastActivityDate: Date | null;
+    streakStartDate: Date | null;
+    isActive: boolean;
   }>;
   badges: {
-    recent: Achievement[];
+    recent: Array<{
+      id: string;
+      title: string;
+      description: string;
+      type: string;
+      earnedAt: Date;
+      celebrationShown: boolean;
+      iconUrl?: string;
+      isNew?: boolean;
+    }>;
     progress: any[];
-    nextToEarn: any[];
+    nextToEarn: Array<{
+      badgeId: string;
+      currentValue: number;
+      targetValue: number;
+      progressPercentage: number;
+      estimatedTimeToCompletion: string;
+    }>;
   };
   dailyGoals: {
     activitiesTarget: number;
     activitiesCompleted: number;
+    activitiesProgress: number;
     timeTarget: number;
     timeSpent: number;
+    timeProgress: number;
+    streakTarget: number;
+    currentStreak: number;
+    streakProgress: number;
   };
+  lastUpdated: string;
 }
 
 const ChildDashboard: React.FC = () => {
@@ -117,7 +148,7 @@ const ChildDashboard: React.FC = () => {
   }, [lastError, clearError]);
 
   // Real-time data fetching
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async (showLoading = false) => {
     try {
       // Don't fetch if authentication is still loading
       if (authLoading) {
@@ -131,52 +162,85 @@ const ChildDashboard: React.FC = () => {
       }
 
       console.log('Child dashboard: Fetching data for user:', user.id);
+      
+      if (showLoading) {
+        setIsLoading(true);
+      }
+      
       setError(''); // Clear any previous errors
 
       // Fetch dashboard data from the child API
-      const dashboardData = await childDashboardApi.getDashboard(user.id);
+      const response = await childDashboardApi.getDashboard(user.id);
+      
+      // Handle the new API response structure
+      const dashboardData = response.dashboard || response;
+      
+      // Transform dates from strings to Date objects
+      if (dashboardData.progressSummary?.lastActivityDate) {
+        dashboardData.progressSummary.lastActivityDate = new Date(dashboardData.progressSummary.lastActivityDate);
+      }
+      
+      if (dashboardData.currentStreaks) {
+        dashboardData.currentStreaks = dashboardData.currentStreaks.map((streak: any) => ({
+          ...streak,
+          lastActivityDate: streak.lastActivityDate ? new Date(streak.lastActivityDate) : null,
+          streakStartDate: streak.streakStartDate ? new Date(streak.streakStartDate) : null
+        }));
+      }
+      
+      if (dashboardData.badges?.recent) {
+        dashboardData.badges.recent = dashboardData.badges.recent.map((badge: any) => ({
+          ...badge,
+          earnedAt: new Date(badge.earnedAt)
+        }));
+      }
+      
       setDashboardData(dashboardData);
       setLastUpdate(new Date());
       setRetryCount(0); // Reset retry count on success
-      console.log('Child dashboard: Data fetched successfully');
+      console.log('Child dashboard: Data fetched successfully', dashboardData);
     } catch (err: any) {
       console.error('Dashboard API failed:', err);
       
-      // Handle authentication errors
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        console.log('Child dashboard: Authentication error, redirecting to login');
+      // Handle authentication errors - but only if we're actually not authenticated
+      if ((err.response?.status === 401 || err.response?.status === 403) && !isAuthenticated) {
+        console.log('Child dashboard: Authentication error and not authenticated, redirecting to login');
         navigate('/child-login', { replace: true });
         return;
+      }
+      
+      // If we're authenticated but API fails, don't redirect - just show error or mock data
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        console.warn('Child dashboard: API returned auth error but user is authenticated - possible token issue');
+        // Could implement token refresh here in the future
       }
 
       // For other errors, use mock data for development but show a warning
       console.warn('Dashboard API failed, using mock data for development');
       
       const mockData = {
-        child: { id: user?.id || 'mock-id' },
+        child: { 
+          id: user?.id || 'mock-id',
+          name: user?.firstName || 'Explorer',
+          age: 10,
+          grade: '5th Grade'
+        },
         progressSummary: {
           totalActivities: 20,
           completedActivities: 14,
           inProgressActivities: 3,
           totalTimeSpent: 2400, // 40 minutes in seconds
           averageScore: 85,
+          weeklyGoalProgress: 70,
+          monthlyGoalProgress: 45,
+          lastActivityDate: new Date(),
+          subjectProgress: [],
           currentDailyStreak: 5,
           longestDailyStreak: 12,
-          lastActivityDate: new Date(),
-          weeklyGoalProgress: 70,
-          monthlyGoalProgress: 45
+          activityCompletionStreak: 3,
+          perfectScoreStreak: 2,
+          helpFreeStreak: 1
         },
-        activeActivities: [],
-        currentStreaks: [
-          {
-            id: '1',
-            streakType: 'DAILY',
-            currentCount: 5,
-            longestCount: 12,
-            isActive: true,
-            lastActivityDate: new Date()
-          }
-        ],
         studyPlans: [
           {
             id: '1',
@@ -184,14 +248,18 @@ const ChildDashboard: React.FC = () => {
             subject: 'Mathematics',
             grade: '5th Grade',
             difficulty: 'intermediate' as const,
-            objectives: ['Basic arithmetic', 'Problem solving'],
-            estimatedDuration: 30,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            objectives: [{ id: '1', description: 'Basic arithmetic', completed: true }, { id: '2', description: 'Problem solving', completed: false }],
+            activities: [],
+            selectedTopics: [],
+            status: 'active' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             totalActivities: 10,
             completedActivities: 7,
+            inProgressActivities: 2,
             progressPercentage: 70,
-            status: 'active' as const
+            totalTimeSpent: 1800,
+            averageScore: 88
           },
           {
             id: '2',
@@ -199,14 +267,38 @@ const ChildDashboard: React.FC = () => {
             subject: 'Science',
             grade: '5th Grade',
             difficulty: 'beginner' as const,
-            objectives: ['Basic concepts', 'Experiments'],
-            estimatedDuration: 25,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            objectives: [{ id: '3', description: 'Basic concepts', completed: false }, { id: '4', description: 'Experiments', completed: false }],
+            activities: [],
+            selectedTopics: [],
+            status: 'active' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             totalActivities: 8,
             completedActivities: 5,
+            inProgressActivities: 1,
             progressPercentage: 62.5,
-            status: 'active' as const
+            totalTimeSpent: 600,
+            averageScore: 82
+          }
+        ],
+        currentStreaks: [
+          {
+            id: '1',
+            type: 'DAILY',
+            currentCount: 5,
+            longestCount: 12,
+            isActive: true,
+            lastActivityDate: new Date(),
+            streakStartDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+          },
+          {
+            id: '2',
+            type: 'ACTIVITY_COMPLETION',
+            currentCount: 3,
+            longestCount: 8,
+            isActive: true,
+            lastActivityDate: new Date(),
+            streakStartDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
           }
         ],
         badges: {
@@ -215,18 +307,20 @@ const ChildDashboard: React.FC = () => {
               id: '1',
               title: 'First Steps',
               description: 'Completed your first activity',
-              iconUrl: '🏅',
-              type: 'badge' as const,
+              type: 'achievement',
               earnedAt: new Date(),
+              celebrationShown: false,
+              iconUrl: '🏅',
               isNew: true
             },
             {
               id: '2',
               title: 'Math Wizard',
               description: 'Completed 5 math activities',
-              iconUrl: '🧙‍♂️',
-              type: 'badge' as const,
+              type: 'achievement',
               earnedAt: new Date(),
+              celebrationShown: true,
+              iconUrl: '🧙‍♂️',
               isNew: false
             }
           ],
@@ -244,9 +338,15 @@ const ChildDashboard: React.FC = () => {
         dailyGoals: {
           activitiesTarget: 5,
           activitiesCompleted: 3,
+          activitiesProgress: 60,
           timeTarget: 1800, // 30 minutes
-          timeSpent: 1200 // 20 minutes
-        }
+          timeSpent: 1200, // 20 minutes
+          timeProgress: 66.7,
+          streakTarget: 7,
+          currentStreak: 5,
+          streakProgress: 71.4
+        },
+        lastUpdated: new Date().toISOString()
       };
       
       setDashboardData(mockData);
@@ -259,15 +359,17 @@ const ChildDashboard: React.FC = () => {
       } else {
         setError('');
       }
+    } finally {
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [user?.id, authLoading, isAuthenticated, isChild, navigate, retryCount]);
 
   // Initial data load
   useEffect(() => {
     const loadData = async () => {
-      setIsLoading(true);
-      await fetchDashboardData();
-      setIsLoading(false);
+      await fetchDashboardData(true); // Show loading for initial load
     };
 
     loadData();
@@ -291,8 +393,9 @@ const ChildDashboard: React.FC = () => {
     }
   };
 
-  const handleStartActivity = (activityId: string) => {
-    navigate(`/child/activity/${activityId}`);
+  const handleStartActivity = (planId: string) => {
+    // Navigate to the study plan activities page
+    navigate(`/child/study-plan/${planId}`);
   };
 
   const handleStudyPlanSelect = (planId: string) => {
@@ -309,7 +412,7 @@ const ChildDashboard: React.FC = () => {
 
   // Component for learning streak display with fire animation
   const LearningStreakDisplay: React.FC<{ streaks: DashboardData['currentStreaks'] }> = ({ streaks }) => {
-    const dailyStreak = streaks.find(s => s.streakType === 'DAILY');
+    const dailyStreak = streaks.find(s => s.type === 'DAILY');
     const currentStreak = dailyStreak?.currentCount || 0;
     const longestStreak = dailyStreak?.longestCount || 0;
 
@@ -365,8 +468,8 @@ const ChildDashboard: React.FC = () => {
 
   // Component for daily goals widget
   const DailyGoalsWidget: React.FC<{ goals: DashboardData['dailyGoals'] }> = ({ goals }) => {
-    const activityProgress = Math.min((goals.activitiesCompleted / goals.activitiesTarget) * 100, 100);
-    const timeProgress = Math.min((goals.timeSpent / goals.timeTarget) * 100, 100);
+    const activityProgress = goals.activitiesProgress || Math.min((goals.activitiesCompleted / goals.activitiesTarget) * 100, 100);
+    const timeProgress = goals.timeProgress || Math.min((goals.timeSpent / goals.timeTarget) * 100, 100);
 
     return (
       <div style={{
@@ -537,99 +640,193 @@ const ChildDashboard: React.FC = () => {
 
   // Component for study plan progress cards
   const StudyPlanProgressCard: React.FC<{ plan: DashboardData['studyPlans'][0] }> = ({ plan }) => {
+    const [isUpdating, setIsUpdating] = useState(false);
     const progressPercentage = plan.progressPercentage || 0;
+    const isCompleted = progressPercentage >= 100;
+    const nextActivityNumber = plan.completedActivities + 1;
     
     return (
       <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        borderRadius: '12px',
-        padding: '20px',
+        background: isCompleted 
+          ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+          : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '16px',
+        padding: '24px',
         color: 'white',
         position: 'relative',
         overflow: 'hidden',
-        minHeight: '160px'
-      }}>
-        {/* Background pattern */}
+        minHeight: '200px',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+      }}
+      onClick={() => {
+        if (!isUpdating) {
+          handleStartActivity(plan.id);
+        }
+      }}
+      onMouseOver={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)';
+        e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.3)';
+      }}
+      onMouseOut={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.2)';
+      }}
+      >
+        {/* Background decorative elements */}
         <div style={{
           position: 'absolute',
-          top: 0,
-          right: 0,
+          top: '-20px',
+          right: '-20px',
+          width: '80px',
+          height: '80px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          borderRadius: '50%'
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '-30px',
+          left: '-30px',
           width: '100px',
           height: '100px',
-          background: 'rgba(255, 255, 255, 0.1)',
-          borderRadius: '50%',
-          transform: 'translate(30px, -30px)'
+          background: 'rgba(255, 255, 255, 0.05)',
+          borderRadius: '50%'
         }} />
         
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <h3 style={{
-            fontSize: '18px',
-            fontWeight: 'bold',
-            marginBottom: '8px'
-          }}>
-            {plan.subject}
-          </h3>
-          
-          <p style={{
-            fontSize: '14px',
-            opacity: 0.9,
-            marginBottom: '16px'
-          }}>
-            {plan.completedActivities}/{plan.totalActivities} activities completed
-          </p>
-
-          {/* Visual progress indicator */}
-          <div style={{
-            width: '100%',
-            height: '6px',
-            backgroundColor: 'rgba(255, 255, 255, 0.3)',
-            borderRadius: '3px',
-            marginBottom: '12px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              width: `${progressPercentage}%`,
-              height: '100%',
-              backgroundColor: '#fbbf24',
-              borderRadius: '3px',
-              transition: 'width 0.5s ease'
-            }} />
-          </div>
-
+          {/* Subject icon and title */}
           <div style={{
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            marginBottom: '12px'
           }}>
-            <span style={{
-              fontSize: '14px',
-              fontWeight: '500'
+            <div style={{
+              fontSize: '32px',
+              marginRight: '12px'
+            }}>
+              {plan.subject.toLowerCase().includes('math') ? '🔢' : 
+               plan.subject.toLowerCase().includes('science') ? '🔬' :
+               plan.subject.toLowerCase().includes('english') ? '📚' :
+               plan.subject.toLowerCase().includes('history') ? '🏛️' : '📖'}
+            </div>
+            <div>
+              <h3 style={{
+                fontSize: '20px',
+                fontWeight: 'bold',
+                margin: '0 0 4px 0'
+              }}>
+                {plan.subject}
+              </h3>
+              <p style={{
+                fontSize: '14px',
+                opacity: 0.9,
+                margin: 0
+              }}>
+                {plan.grade || 'Grade 5'}
+              </p>
+            </div>
+          </div>
+          
+          {/* Progress information */}
+          <div style={{
+            marginBottom: '16px'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px'
+            }}>
+              <span style={{
+                fontSize: '14px',
+                opacity: 0.9
+              }}>
+                Progress
+              </span>
+              <span style={{
+                fontSize: '16px',
+                fontWeight: 'bold'
+              }}>
+                {plan.completedActivities}/{plan.totalActivities} activities
+              </span>
+            </div>
+
+            {/* Visual progress bar */}
+            <div style={{
+              width: '100%',
+              height: '8px',
+              backgroundColor: 'rgba(255, 255, 255, 0.3)',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              marginBottom: '12px'
+            }}>
+              <div style={{
+                width: `${progressPercentage}%`,
+                height: '100%',
+                backgroundColor: '#fbbf24',
+                borderRadius: '4px',
+                transition: 'width 0.8s ease',
+                boxShadow: '0 0 8px rgba(251, 191, 36, 0.5)'
+              }} />
+            </div>
+
+            <div style={{
+              fontSize: '18px',
+              fontWeight: 'bold',
+              textAlign: 'center'
             }}>
               {Math.round(progressPercentage)}% Complete
-            </span>
+            </div>
+          </div>
+
+          {/* Action area */}
+          <div style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            padding: '16px',
+            textAlign: 'center',
+            backdropFilter: 'blur(10px)'
+          }}>
+            {isCompleted ? (
+              <>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>🎉</div>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  Completed!
+                </div>
+                <div style={{ fontSize: '14px', opacity: 0.9 }}>
+                  Click to review your work
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>🚀</div>
+                <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '4px' }}>
+                  Ready to Continue?
+                </div>
+                <div style={{ fontSize: '14px', opacity: 0.9 }}>
+                  Next: Activity {nextActivityNumber}
+                </div>
+              </>
+            )}
             
-            <button
-              onClick={() => handleStartActivity(plan.id)}
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-              }}
-            >
-              Continue →
-            </button>
+            <div style={{
+              marginTop: '12px',
+              padding: '8px 16px',
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              opacity: isUpdating ? 0.7 : 1,
+              transition: 'opacity 0.2s ease'
+            }}>
+              {isUpdating ? (
+                <>⏳ Loading...</>
+              ) : (
+                <>{isCompleted ? 'Review Plan' : 'Continue Learning'} →</>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -775,11 +972,45 @@ const ChildDashboard: React.FC = () => {
               Hi, {user?.firstName || 'Explorer'}! 👋
             </span>
             <div style={{
-              fontSize: '12px',
-              color: '#6b7280',
-              textAlign: 'right'
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
             }}>
-              Last updated: {lastUpdate.toLocaleTimeString()}
+              <div style={{
+                fontSize: '12px',
+                color: '#6b7280',
+                textAlign: 'right'
+              }}>
+                Last updated: {lastUpdate.toLocaleTimeString()}
+              </div>
+              <button
+                onClick={() => fetchDashboardData(true)}
+                disabled={isLoading}
+                style={{
+                  background: 'none',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  color: '#6b7280',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  opacity: isLoading ? 0.5 : 1,
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6';
+                    e.currentTarget.style.borderColor = '#9ca3af';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = '#d1d5db';
+                }}
+                title="Refresh dashboard data"
+              >
+                {isLoading ? '⏳' : '🔄'}
+              </button>
             </div>
             <button
               onClick={handleLogout}
@@ -838,27 +1069,33 @@ const ChildDashboard: React.FC = () => {
               <button
                 onClick={() => {
                   setError('');
-                  fetchDashboardData();
+                  fetchDashboardData(true);
                 }}
+                disabled={isLoading}
                 style={{
-                  backgroundColor: '#fbbf24',
+                  backgroundColor: isLoading ? '#d1d5db' : '#fbbf24',
                   color: 'white',
                   padding: '8px 16px',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: '500',
                   border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: isLoading ? 0.7 : 1
                 }}
                 onMouseOver={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f59e0b';
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = '#f59e0b';
+                  }
                 }}
                 onMouseOut={(e) => {
-                  e.currentTarget.style.backgroundColor = '#fbbf24';
+                  if (!isLoading) {
+                    e.currentTarget.style.backgroundColor = '#fbbf24';
+                  }
                 }}
               >
-                Try Again 🔄
+                {isLoading ? 'Loading...' : 'Try Again 🔄'}
               </button>
             )}
           </div>
@@ -892,25 +1129,56 @@ const ChildDashboard: React.FC = () => {
           {dashboardData.studyPlans.length === 0 ? (
             <div style={{
               backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              borderRadius: '16px',
-              padding: '48px',
+              borderRadius: '20px',
+              padding: '60px 40px',
               textAlign: 'center',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)',
+              border: '2px dashed #e5e7eb'
             }}>
               <div style={{
-                fontSize: '64px',
-                marginBottom: '16px'
-              }}>🔍</div>
-              <p style={{
-                fontSize: '24px',
-                fontWeight: '600',
-                color: '#4b5563',
-                marginBottom: '8px'
-              }}>No active adventures yet!</p>
+                fontSize: '80px',
+                marginBottom: '20px',
+                animation: 'bounce 2s infinite'
+              }}>🎒</div>
+              <h3 style={{
+                fontSize: '28px',
+                fontWeight: 'bold',
+                color: '#1f2937',
+                marginBottom: '12px'
+              }}>Ready for Your Learning Adventure?</h3>
               <p style={{
                 color: '#6b7280',
-                fontSize: '16px'
-              }}>Ask your parent to create a study plan for you.</p>
+                fontSize: '18px',
+                marginBottom: '24px',
+                lineHeight: '1.6'
+              }}>
+                Your learning journey is about to begin! 🌟<br/>
+                Ask your parent to create your first study plan.
+              </p>
+              <div style={{
+                backgroundColor: '#f3f4f6',
+                borderRadius: '12px',
+                padding: '20px',
+                marginTop: '20px'
+              }}>
+                <p style={{
+                  fontSize: '16px',
+                  color: '#4b5563',
+                  margin: 0,
+                  fontWeight: '500'
+                }}>
+                  💡 <strong>What you can do:</strong><br/>
+                  Tell your parent what subjects you'd like to learn about!
+                </p>
+              </div>
+              
+              <style>{`
+                @keyframes bounce {
+                  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+                  40% { transform: translateY(-10px); }
+                  60% { transform: translateY(-5px); }
+                }
+              `}</style>
             </div>
           ) : (
             <div style={{

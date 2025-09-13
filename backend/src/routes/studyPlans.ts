@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticateToken, requireParent, requireChild } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { studyPlanLogging, monitorDatabaseOperation } from '../middleware/studyPlanLoggingMiddleware';
 import Joi from 'joi';
 import { geminiService } from '../services/geminiService';
 import { getTopicsByGradeAndSubject, CURRICULUM_MASTER_DATA } from '../data/curriculumMasterData';
@@ -33,7 +34,7 @@ const prisma = new PrismaClient();
  * Get study plans for a specific child (child access)
  * GET /api/study-plans/child/:childId
  */
-router.get('/child/:childId', authenticateToken, requireChild, async (req, res) => {
+router.get('/child/:childId', ...studyPlanLogging('ACCESS_PLANS'), authenticateToken, requireChild, async (req, res) => {
   try {
     const { childId } = req.params;
     
@@ -49,28 +50,66 @@ router.get('/child/:childId', authenticateToken, requireChild, async (req, res) 
       });
     }
     
-    const plans = await prisma.studyPlan.findMany({
-      where: { 
-        childId,
-        status: 'ACTIVE' // Only show active plans to children
-      },
-      include: {
-        activities: {
-          orderBy: {
-            createdAt: 'asc'
+    const plans = await monitorDatabaseOperation(
+      'get_child_study_plans',
+      'study_plans',
+      'SELECT',
+      () => prisma.studyPlan.findMany({
+        where: { 
+          childId
+          // Removed ACTIVE-only filter - show all plans to children
+        },
+        include: {
+          activities: {
+            include: {
+              progressRecords: {
+                where: { childId }
+              }
+            },
+            orderBy: {
+              createdAt: 'asc'
+            }
           }
+        },
+        orderBy: {
+          createdAt: 'desc'
         }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+      }),
+      { childId }
+    );
     
-    // Parse objectives for each plan
-    const plansWithParsedObjectives = plans.map(plan => ({
-      ...plan,
-      objectives: JSON.parse(plan.objectives as string)
-    }));
+    // Parse objectives and calculate progress for each plan
+    const plansWithParsedObjectives = plans.map(plan => {
+      const totalActivities = plan.activities.length;
+      const completedActivities = plan.activities.filter(activity => 
+        activity.progressRecords.some(record => record.status === 'COMPLETED')
+      ).length;
+      
+      // Calculate total time spent across all activities
+      const totalTimeSpent = plan.activities.reduce((total, activity) => {
+        const activityTimeSpent = activity.progressRecords.reduce((activityTotal, record) => {
+          return activityTotal + (record.timeSpent || 0);
+        }, 0);
+        return total + activityTimeSpent;
+      }, 0);
+      
+      // Calculate progress percentage and round to 1 decimal place
+      const progressPercentage = totalActivities > 0 
+        ? Math.round((completedActivities / totalActivities) * 1000) / 10 
+        : 0;
+      
+      return {
+        ...plan,
+        objectives: JSON.parse(plan.objectives as string),
+        totalActivities,
+        completedActivities,
+        progressPercentage,
+        totalTimeSpent, // in minutes
+        inProgressActivities: plan.activities.filter(activity => 
+          activity.progressRecords.some(record => record.status === 'IN_PROGRESS')
+        ).length
+      };
+    });
     
     res.json({
       plans: plansWithParsedObjectives,
@@ -82,6 +121,112 @@ router.get('/child/:childId', authenticateToken, requireChild, async (req, res) 
       error: {
         code: 'FETCH_FAILED',
         message: 'Failed to fetch study plans',
+        timestamp: new Date().toISOString(),
+        requestId: req.id || 'unknown'
+      }
+    });
+  }
+});
+
+/**
+ * Get a specific study plan for a child (child access)
+ * GET /api/study-plans/child/:childId/plan/:planId
+ */
+router.get('/child/:childId/plan/:planId', ...studyPlanLogging('ACCESS_PLAN'), authenticateToken, requireChild, async (req, res) => {
+  try {
+    const { childId, planId } = req.params;
+    
+    // Verify the child is accessing their own study plan
+    if (req.user?.userId !== childId) {
+      return res.status(403).json({
+        error: {
+          code: 'ACCESS_DENIED',
+          message: 'Children can only access their own study plans',
+          timestamp: new Date().toISOString(),
+          requestId: req.id || 'unknown'
+        }
+      });
+    }
+    
+    const plan = await prisma.studyPlan.findFirst({
+      where: { 
+        id: planId,
+        childId: childId
+        // Removed ACTIVE-only filter - allow access to all child's plans
+      },
+      include: {
+        activities: {
+          include: {
+            progressRecords: {
+              where: { childId }
+            }
+          },
+          orderBy: {
+            createdAt: 'asc'
+          }
+        },
+        child: {
+          select: {
+            id: true,
+            name: true,
+            age: true
+          }
+        }
+      }
+    });
+    
+    if (!plan) {
+      return res.status(404).json({
+        error: {
+          code: 'PLAN_NOT_FOUND',
+          message: 'Study plan not found or not accessible',
+          timestamp: new Date().toISOString(),
+          requestId: req.id || 'unknown'
+        }
+      });
+    }
+    
+    // Parse objectives and calculate progress for the plan
+    const totalActivities = plan.activities.length;
+    const completedActivities = plan.activities.filter(activity => 
+      activity.progressRecords.some(record => record.status === 'COMPLETED')
+    ).length;
+    
+    // Calculate total time spent across all activities
+    const totalTimeSpent = plan.activities.reduce((total, activity) => {
+      const activityTimeSpent = activity.progressRecords.reduce((activityTotal, record) => {
+        return activityTotal + (record.timeSpent || 0);
+      }, 0);
+      return total + activityTimeSpent;
+    }, 0);
+    
+    // Calculate progress percentage and round to 1 decimal place
+    const progressPercentage = totalActivities > 0 
+      ? Math.round((completedActivities / totalActivities) * 1000) / 10 
+      : 0;
+    
+    const planWithParsedObjectives = {
+      ...plan,
+      objectives: JSON.parse(plan.objectives as string),
+      totalActivities,
+      completedActivities,
+      progressPercentage,
+      totalTimeSpent, // in minutes
+      inProgressActivities: plan.activities.filter(activity => 
+        activity.progressRecords.some(record => record.status === 'IN_PROGRESS')
+      ).length
+    };
+    
+    res.json({
+      plan: planWithParsedObjectives,
+      message: 'Study plan retrieved successfully'
+    });
+  } catch (error) {
+    logger.error('Error fetching child study plan:', error);
+    res.status(500).json({
+      error: {
+        code: 'FETCH_FAILED',
+        message: 'Failed to fetch study plan',
         timestamp: new Date().toISOString(),
         requestId: req.id || 'unknown'
       }

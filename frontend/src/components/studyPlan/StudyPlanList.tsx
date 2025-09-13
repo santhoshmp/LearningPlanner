@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   Box,
   Button,
@@ -28,6 +29,7 @@ import { ParentDashboardLayout } from '../layout';
 
 const StudyPlanList: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [selectedChildId, setSelectedChildId] = useState<string>('');
   
   const { data: children, isLoading: isLoadingChildren } = useQuery({
@@ -42,15 +44,48 @@ const StudyPlanList: React.FC = () => {
       return studyPlanApi.getPlans(selectedChildId || undefined);
     },
   });
+
+  // Mutation for activating plans
+  const activatePlanMutation = useMutation({
+    mutationFn: studyPlanApi.activatePlan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['studyPlans'] });
+      toast.success('Study plan activated successfully!');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to activate study plan');
+    },
+  });
+
+  // Mutation for pausing plans
+  const pausePlanMutation = useMutation({
+    mutationFn: studyPlanApi.pausePlan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['studyPlans'] });
+      toast.success('Study plan paused successfully!');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to pause study plan');
+    },
+  });
   
   const handleChildChange = (event: any) => {
     setSelectedChildId(event.target.value);
   };
+
+  const handleActivatePlan = (planId: string) => {
+    activatePlanMutation.mutate(planId);
+  };
+
+  const handlePausePlan = (planId: string) => {
+    pausePlanMutation.mutate(planId);
+  };
   
   const getStatusChip = (status: string) => {
     let color: 'success' | 'default' | 'warning' | 'info' = 'default';
+    const normalizedStatus = status.toLowerCase();
     
-    switch (status) {
+    switch (normalizedStatus) {
       case 'active':
         color = 'success';
         break;
@@ -66,7 +101,7 @@ const StudyPlanList: React.FC = () => {
     
     return (
       <Chip 
-        label={status.charAt(0).toUpperCase() + status.slice(1)} 
+        label={normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)} 
         color={color}
         size="small"
       />
@@ -106,13 +141,16 @@ const StudyPlanList: React.FC = () => {
   // Action buttons for the layout
   const actionButtons = (
     <Box sx={{ display: 'flex', gap: 1 }}>
-      <Button
-        variant="outlined"
-        onClick={testCreatePlan}
-        size="small"
-      >
-        Test Create
-      </Button>
+      {process.env.NODE_ENV === 'development' && (
+        <Button
+          variant="outlined"
+          onClick={testCreatePlan}
+          size="small"
+          sx={{ opacity: 0.7 }}
+        >
+          Quick Test Plan
+        </Button>
+      )}
       <Button
         variant="contained"
         startIcon={<AddIcon />}
@@ -238,14 +276,39 @@ const StudyPlanList: React.FC = () => {
                     <TableCell>{getStatusChip(plan.status)}</TableCell>
                     <TableCell>{new Date(plan.createdAt).toLocaleDateString()}</TableCell>
                     <TableCell align="right">
-                      <Button
-                        component={RouterLink}
-                        to={`/study-plans/${plan.id}`}
-                        color="primary"
-                        size="small"
-                      >
-                        View
-                      </Button>
+                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                        <Button
+                          component={RouterLink}
+                          to={`/study-plans/${plan.id}`}
+                          color="primary"
+                          size="small"
+                          variant="outlined"
+                        >
+                          View
+                        </Button>
+                        {plan.status.toLowerCase() === 'draft' && (
+                          <Button
+                            color="success"
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleActivatePlan(plan.id)}
+                            disabled={activatePlanMutation.isPending}
+                          >
+                            Activate
+                          </Button>
+                        )}
+                        {plan.status.toLowerCase() === 'active' && (
+                          <Button
+                            color="warning"
+                            size="small"
+                            variant="contained"
+                            onClick={() => handlePausePlan(plan.id)}
+                            disabled={pausePlanMutation.isPending}
+                          >
+                            Pause
+                          </Button>
+                        )}
+                      </Box>
                     </TableCell>
                   </TableRow>
                 );

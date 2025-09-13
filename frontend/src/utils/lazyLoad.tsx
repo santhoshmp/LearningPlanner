@@ -1,5 +1,5 @@
 import React, { lazy, ComponentType, LazyExoticComponent, Suspense, ReactNode } from 'react';
-import { LoadingState } from '../components/common/LoadingState';
+import { LoadingState } from '../components/common';
 
 /**
  * Helper function to lazy load components with better error handling

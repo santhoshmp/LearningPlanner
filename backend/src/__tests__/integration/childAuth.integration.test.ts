@@ -308,4 +308,166 @@ describe('Child Authentication Integration', () => {
       jest.useRealTimers();
     });
   });
+
+  describe('Activities API Access', () => {
+    let authToken: string;
+    let testActivity: any;
+
+    beforeEach(async () => {
+      // Login child to get auth token
+      const loginResponse = await request(app)
+        .post('/api/child/auth/login')
+        .send({
+          username: 'testchild',
+          pin: '1234'
+        });
+
+      authToken = loginResponse.body.token;
+
+      // Create test study plan and activity
+      const studyPlan = await prisma.studyPlan.create({
+        data: {
+          childId: childProfile.id,
+          subject: 'Mathematics',
+          difficulty: 'BEGINNER',
+          objectives: JSON.stringify(['Learn basic addition']),
+          status: 'ACTIVE'
+        }
+      });
+
+      testActivity = await prisma.studyActivity.create({
+        data: {
+          planId: studyPlan.id,
+          title: 'Basic Addition',
+          description: 'Learn to add numbers',
+          content: JSON.stringify({ type: 'quiz', questions: [] }),
+          estimatedDuration: 30,
+          difficulty: 'BEGINNER',
+          prerequisites: JSON.stringify([]),
+          completionCriteria: JSON.stringify({ minScore: 70 })
+        }
+      });
+    });
+
+    afterEach(async () => {
+      await prisma.progressRecord.deleteMany({});
+      await prisma.studyActivity.deleteMany({});
+      await prisma.studyPlan.deleteMany({});
+    });
+
+    it('should allow child to get activity progress', async () => {
+      const response = await request(app)
+        .get(`/api/activities/${testActivity.id}/progress`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(response.body.progress).toBeDefined();
+      expect(response.body.progress.status).toBe('NOT_STARTED');
+    });
+
+    it('should allow child to start activity', async () => {
+      const response = await request(app)
+        .post(`/api/activities/${testActivity.id}/start`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(response.body.progress.status).toBe('IN_PROGRESS');
+      expect(response.body.activity.id).toBe(testActivity.id);
+    });
+
+    it('should allow child to update activity progress', async () => {
+      // First start the activity
+      await request(app)
+        .post(`/api/activities/${testActivity.id}/start`)
+        .set('Authorization', `Bearer ${authToken}`);
+
+      // Then update progress
+      const response = await request(app)
+        .put(`/api/activities/${testActivity.id}/progress`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          status: 'COMPLETED',
+          score: 85,
+          timeSpent: 1200
+        })
+        .expect(200);
+
+      expect(response.body.progress.status).toBe('COMPLETED');
+      expect(response.body.progress.score).toBe(85);
+    });
+
+    it('should allow child to get activity details', async () => {
+      const response = await request(app)
+        .get(`/api/activities/${testActivity.id}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(response.body.activity.id).toBe(testActivity.id);
+      expect(response.body.activity.title).toBe('Basic Addition');
+    });
+
+    it('should deny access to activities from other children', async () => {
+      // Create another child and activity
+      const otherChild = await prisma.childProfile.create({
+        data: {
+          username: 'otherchild',
+          pin: await bcrypt.hash('5678', 10),
+          firstName: 'Other',
+          lastName: 'Child',
+          age: 9,
+          grade: '4th Grade',
+          parentId: parentUser.id,
+          isActive: true
+        }
+      });
+
+      const otherPlan = await prisma.studyPlan.create({
+        data: {
+          childId: otherChild.id,
+          subject: 'Science',
+          difficulty: 'BEGINNER',
+          objectives: JSON.stringify(['Learn about plants']),
+          status: 'ACTIVE'
+        }
+      });
+
+      const otherActivity = await prisma.studyActivity.create({
+        data: {
+          planId: otherPlan.id,
+          title: 'Plant Biology',
+          description: 'Learn about plants',
+          content: JSON.stringify({ type: 'reading' }),
+          estimatedDuration: 20,
+          difficulty: 'BEGINNER',
+          prerequisites: JSON.stringify([]),
+          completionCriteria: JSON.stringify({ minScore: 60 })
+        }
+      });
+
+      // Current child should not be able to access other child's activity
+      await request(app)
+        .get(`/api/activities/${otherActivity.id}/progress`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(403);
+
+      // Cleanup
+      await prisma.studyActivity.delete({ where: { id: otherActivity.id } });
+      await prisma.studyPlan.delete({ where: { id: otherPlan.id } });
+      await prisma.childProfile.delete({ where: { id: otherChild.id } });
+    });
+
+    it('should require authentication for all activity endpoints', async () => {
+      const endpoints = [
+        { method: 'get', path: `/api/activities/${testActivity.id}/progress` },
+        { method: 'post', path: `/api/activities/${testActivity.id}/start` },
+        { method: 'put', path: `/api/activities/${testActivity.id}/progress` },
+        { method: 'get', path: `/api/activities/${testActivity.id}` }
+      ];
+
+      for (const endpoint of endpoints) {
+        await request(app)[endpoint.method as keyof typeof request](endpoint.path)
+          .expect(401);
+      }
+    });
+  });
 });

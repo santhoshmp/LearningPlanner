@@ -7,4 +7,6 @@ export { default as LoadingState } from './LoadingState';
 export { default as ErrorState } from './ErrorState';
 export { default as StandardButton } from './StandardButton';
 export { default as ChildFriendlyError } from './ChildFriendlyError';
+export { default as ChildFriendlyErrorDisplay } from './ChildFriendlyErrorDisplay';
 export { default as ChildErrorBoundary } from './ChildErrorBoundary';
+export { default as ChildAuthErrorBoundary } from './ChildAuthErrorBoundary';

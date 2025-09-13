@@ -504,6 +504,14 @@ function App() {
                     }
                   />
                   <Route
+                    path="/child/study-plan/:planId"
+                    element={
+                      <ProtectedRoute>
+                        <ActivityPlayer />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
                     path="/child/achievements"
                     element={
                       <ProtectedRoute>

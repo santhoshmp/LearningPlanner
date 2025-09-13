@@ -33,7 +33,44 @@ export interface StudyActivity {
 
 export interface ActivityContent {
   type: 'text' | 'quiz' | 'interactive' | 'video';
-  data: any; // This will be structured based on the activity type
+  data: TextContentData | QuizContentData | InteractiveContentData | VideoContentData | any;
+}
+
+export interface TextContentData {
+  content: string;
+  comprehensionQuestion?: string;
+}
+
+export interface QuizContentData {
+  questions: QuizQuestion[];
+}
+
+export interface QuizQuestion {
+  id?: string;
+  text: string;
+  type: 'multiple-choice' | 'true-false' | 'short-answer';
+  options?: string[];
+  correctAnswer?: number | boolean | string;
+  image?: string;
+}
+
+export interface InteractiveContentData {
+  description: string;
+  instructions?: string;
+  exercises?: InteractiveExercise[];
+}
+
+export interface InteractiveExercise {
+  number?: number;
+  word?: string;
+  description?: string;
+}
+
+export interface VideoContentData {
+  videoUrl: string;
+  title: string;
+  description?: string;
+  comprehensionQuestion?: string;
 }
 
 export interface CompletionCriteria {

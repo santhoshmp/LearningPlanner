@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { authenticateToken, requireRole, requireParentOfChild, requireSelfChildAccess } from '../auth';
+import { authenticateToken, requireRole, requireParentOfChild, requireSelfChildAccess, requireChild } from '../auth';
 import { authService } from '../../services/authService';
 import { redisService } from '../../services/redisService';
 import { Role } from '@prisma/client';
@@ -398,6 +398,64 @@ describe('Auth Middleware', () => {
       const middleware = requireSelfChildAccess();
       
       await middleware(
+        mockRequest as Request,
+        mockResponse as Response,
+        nextFunction
+      );
+
+      expect(nextFunction).toHaveBeenCalled();
+    });
+  });
+
+  describe('requireChild', () => {
+    it('should return 401 if user is not authenticated', async () => {
+      await requireChild(
+        mockRequest as Request,
+        mockResponse as Response,
+        nextFunction
+      );
+
+      expect(mockResponse.status).toHaveBeenCalledWith(401);
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            code: 'AUTHENTICATION_REQUIRED'
+          })
+        })
+      );
+      expect(nextFunction).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 if user is not a child', async () => {
+      mockRequest.user = {
+        userId: 'parent123',
+        role: Role.PARENT
+      };
+      
+      await requireChild(
+        mockRequest as Request,
+        mockResponse as Response,
+        nextFunction
+      );
+
+      expect(mockResponse.status).toHaveBeenCalledWith(403);
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            code: 'INSUFFICIENT_PERMISSIONS'
+          })
+        })
+      );
+      expect(nextFunction).not.toHaveBeenCalled();
+    });
+
+    it('should call next if user is a child', async () => {
+      mockRequest.user = {
+        userId: 'child123',
+        role: Role.CHILD
+      };
+      
+      await requireChild(
         mockRequest as Request,
         mockResponse as Response,
         nextFunction

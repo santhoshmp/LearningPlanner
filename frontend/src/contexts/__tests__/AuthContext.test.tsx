@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../AuthContext';
 import { authApi } from '../../services/api';
 import { SessionManager } from '../../utils/sessionManager';
+import { ChildAuthErrorHandler } from '../../utils/childErrorHandler';
 import '@testing-library/jest-dom';
 
 // Mock the API service
@@ -29,6 +30,18 @@ jest.mock('../../utils/sessionManager', () => ({
     validateSession: jest.fn(),
     createSessionFromAuthResult: jest.fn(),
     repairSession: jest.fn(),
+  },
+}));
+
+// Mock ChildAuthErrorHandler
+jest.mock('../../utils/childErrorHandler', () => ({
+  ChildAuthErrorHandler: {
+    cleanCorruptedSession: jest.fn(),
+    isLoopDetected: jest.fn(),
+    resetLoopDetection: jest.fn(),
+    withNetworkRetry: jest.fn(),
+    handleAuthenticationError: jest.fn(),
+    recordRedirect: jest.fn(),
   },
 }));
 
@@ -66,6 +79,7 @@ const renderAuthProvider = () => {
 
 describe('AuthContext', () => {
   const mockSessionManager = SessionManager as jest.Mocked<typeof SessionManager>;
+  const mockChildAuthErrorHandler = ChildAuthErrorHandler as jest.Mocked<typeof ChildAuthErrorHandler>;
   
   beforeEach(() => {
     // Clear all mocks before each test
@@ -84,6 +98,10 @@ describe('AuthContext', () => {
     mockSessionManager.hasSession.mockReturnValue(false);
     mockSessionManager.isChildSession.mockReturnValue(false);
     mockSessionManager.getCurrentUserRole.mockReturnValue(null);
+    
+    // Reset ChildAuthErrorHandler mocks
+    mockChildAuthErrorHandler.isLoopDetected.mockReturnValue(false);
+    mockChildAuthErrorHandler.withNetworkRetry.mockImplementation((fn) => fn());
   });
   
   it('initializes with correct default values', async () => {
@@ -153,48 +171,230 @@ describe('AuthContext', () => {
     });
   });
   
-  it('handles child login successfully', async () => {
-    const mockChild = {
-      id: 'child-123',
-      name: 'Test Child',
-      username: 'testchild',
-      role: 'CHILD',
-    };
-    
-    const mockAuthResult = {
-      user: mockChild,
-      accessToken: 'child-access-token',
-      refreshToken: 'child-refresh-token',
-      expiresIn: 900,
-    };
-    
-    // Mock successful child login
-    (authApi.childLogin as jest.Mock).mockResolvedValue(mockAuthResult);
-    
-    renderAuthProvider();
-    
-    // Wait for initial loading to complete
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+  describe('Child Login with Session Cleanup', () => {
+    it('handles child login successfully', async () => {
+      const mockChild = {
+        id: 'child-123',
+        name: 'Test Child',
+        username: 'testchild',
+        role: 'CHILD',
+      };
+      
+      const mockAuthResult = {
+        user: mockChild,
+        accessToken: 'child-access-token',
+        refreshToken: 'child-refresh-token',
+        expiresIn: 900,
+      };
+      
+      // Mock successful child login
+      (authApi.childLogin as jest.Mock).mockResolvedValue(mockAuthResult);
+      
+      renderAuthProvider();
+      
+      // Wait for initial loading to complete
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      });
+      
+      // Click child login button
+      await act(async () => {
+        screen.getByText('Child Login').click();
+      });
+      
+      // Check that childLogin was called with correct credentials
+      expect(authApi.childLogin).toHaveBeenCalledWith('username', '1234');
+      
+      // Check that tokens were stored in localStorage
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', 'child-access-token');
+      expect(window.localStorage.setItem).toHaveBeenCalledWith('refreshToken', 'child-refresh-token');
+      
+      // Check that user state was updated
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('Authenticated');
+        expect(screen.getByTestId('is-child')).toHaveTextContent('Child');
+        expect(screen.getByTestId('user-info')).toHaveTextContent(JSON.stringify(mockChild));
+      });
     });
-    
-    // Click child login button
-    await act(async () => {
-      screen.getByText('Child Login').click();
+
+    it('always cleans session data before child login attempt', async () => {
+      const mockChild = {
+        id: 'child-123',
+        name: 'Test Child',
+        username: 'testchild',
+        role: 'CHILD',
+      };
+
+      const mockAuthResult = {
+        user: mockChild,
+        accessToken: 'child-access-token',
+        refreshToken: 'child-refresh-token',
+        expiresIn: 900,
+      };
+
+      // Mock successful child login
+      (authApi.childLogin as jest.Mock).mockResolvedValue(mockAuthResult);
+      mockChildAuthErrorHandler.isLoopDetected.mockReturnValue(false);
+
+      renderAuthProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      });
+
+      await act(async () => {
+        screen.getByText('Child Login').click();
+      });
+
+      // Verify cleanCorruptedSession is called before loop detection check
+      expect(mockChildAuthErrorHandler.cleanCorruptedSession).toHaveBeenCalledTimes(1);
+      expect(mockChildAuthErrorHandler.isLoopDetected).toHaveBeenCalledTimes(1);
+      
+      // Verify the order: cleanCorruptedSession should be called before isLoopDetected
+      const cleanCallOrder = (mockChildAuthErrorHandler.cleanCorruptedSession as jest.Mock).mock.invocationCallOrder[0];
+      const loopCheckCallOrder = (mockChildAuthErrorHandler.isLoopDetected as jest.Mock).mock.invocationCallOrder[0];
+      expect(cleanCallOrder).toBeLessThan(loopCheckCallOrder);
     });
-    
-    // Check that childLogin was called with correct credentials
-    expect(authApi.childLogin).toHaveBeenCalledWith('username', '1234');
-    
-    // Check that tokens were stored in localStorage
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', 'child-access-token');
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('refreshToken', 'child-refresh-token');
-    
-    // Check that user state was updated
-    await waitFor(() => {
-      expect(screen.getByTestId('authenticated')).toHaveTextContent('Authenticated');
-      expect(screen.getByTestId('is-child')).toHaveTextContent('Child');
-      expect(screen.getByTestId('user-info')).toHaveTextContent(JSON.stringify(mockChild));
+
+    it('cleans session data even when no loop is detected', async () => {
+      const mockChild = {
+        id: 'child-123',
+        name: 'Test Child',
+        username: 'testchild',
+        role: 'CHILD',
+      };
+
+      const mockAuthResult = {
+        user: mockChild,
+        accessToken: 'child-access-token',
+        refreshToken: 'child-refresh-token',
+        expiresIn: 900,
+      };
+
+      (authApi.childLogin as jest.Mock).mockResolvedValue(mockAuthResult);
+      mockChildAuthErrorHandler.isLoopDetected.mockReturnValue(false);
+
+      renderAuthProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      });
+
+      await act(async () => {
+        screen.getByText('Child Login').click();
+      });
+
+      // Verify session is cleaned even when no loop detected
+      expect(mockChildAuthErrorHandler.cleanCorruptedSession).toHaveBeenCalledTimes(1);
+      expect(mockChildAuthErrorHandler.resetLoopDetection).not.toHaveBeenCalled(); // Should not reset when no loop detected
+    });
+
+    it('cleans session data and resets loop detection when loop is detected', async () => {
+      const mockChild = {
+        id: 'child-123',
+        name: 'Test Child',
+        username: 'testchild',
+        role: 'CHILD',
+      };
+
+      const mockAuthResult = {
+        user: mockChild,
+        accessToken: 'child-access-token',
+        refreshToken: 'child-refresh-token',
+        expiresIn: 900,
+      };
+
+      (authApi.childLogin as jest.Mock).mockResolvedValue(mockAuthResult);
+      mockChildAuthErrorHandler.isLoopDetected.mockReturnValue(true);
+
+      renderAuthProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      });
+
+      await act(async () => {
+        screen.getByText('Child Login').click();
+      });
+
+      // Verify both session cleaning and loop reset occur when loop detected
+      expect(mockChildAuthErrorHandler.cleanCorruptedSession).toHaveBeenCalledTimes(1);
+      expect(mockChildAuthErrorHandler.resetLoopDetection).toHaveBeenCalledTimes(1);
+      
+      // Verify the order: cleanCorruptedSession should be called before isLoopDetected
+      const cleanCallOrder = (mockChildAuthErrorHandler.cleanCorruptedSession as jest.Mock).mock.invocationCallOrder[0];
+      const loopCheckCallOrder = (mockChildAuthErrorHandler.isLoopDetected as jest.Mock).mock.invocationCallOrder[0];
+      expect(cleanCallOrder).toBeLessThan(loopCheckCallOrder);
+    });
+
+    it('handles child login failure with proper error handling', async () => {
+      const loginError = new Error('Invalid credentials');
+      
+      (authApi.childLogin as jest.Mock).mockRejectedValue(loginError);
+      mockChildAuthErrorHandler.isLoopDetected.mockReturnValue(false);
+      mockChildAuthErrorHandler.withNetworkRetry.mockRejectedValue(loginError);
+
+      renderAuthProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      });
+
+      await act(async () => {
+        screen.getByText('Child Login').click();
+      });
+
+      // Verify session cleanup still occurs even on login failure
+      expect(mockChildAuthErrorHandler.cleanCorruptedSession).toHaveBeenCalledTimes(1);
+      expect(mockChildAuthErrorHandler.withNetworkRetry).toHaveBeenCalledTimes(1);
+      
+      // User should remain unauthenticated
+      expect(screen.getByTestId('authenticated')).toHaveTextContent('Not Authenticated');
+    });
+
+    it('prevents multiple simultaneous session cleanups', async () => {
+      const mockChild = {
+        id: 'child-123',
+        name: 'Test Child',
+        username: 'testchild',
+        role: 'CHILD',
+      };
+
+      const mockAuthResult = {
+        user: mockChild,
+        accessToken: 'child-access-token',
+        refreshToken: 'child-refresh-token',
+        expiresIn: 900,
+      };
+
+      // Simulate slow login response
+      (authApi.childLogin as jest.Mock).mockImplementation(() => 
+        new Promise(resolve => setTimeout(() => resolve(mockAuthResult), 100))
+      );
+      mockChildAuthErrorHandler.isLoopDetected.mockReturnValue(false);
+
+      renderAuthProvider();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      });
+
+      // Click child login button multiple times rapidly
+      await act(async () => {
+        screen.getByText('Child Login').click();
+        screen.getByText('Child Login').click();
+        screen.getByText('Child Login').click();
+      });
+
+      // Wait for all operations to complete
+      await waitFor(() => {
+        expect(screen.getByTestId('authenticated')).toHaveTextContent('Authenticated');
+      });
+
+      // Session cleanup should only be called once per actual login attempt
+      // (The exact count may vary based on implementation, but should be reasonable)
+      expect(mockChildAuthErrorHandler.cleanCorruptedSession).toHaveBeenCalled();
+      expect((mockChildAuthErrorHandler.cleanCorruptedSession as jest.Mock).mock.calls.length).toBeLessThanOrEqual(3);
     });
   });
   

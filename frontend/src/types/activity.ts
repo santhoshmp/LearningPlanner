@@ -30,17 +30,36 @@ export interface ActivityState {
 }
 
 export interface ActivitySubmission {
-  activityId: string;
-  answers: Record<string, any>;
-  timeSpent: number; // in seconds
-  helpRequests: Omit<HelpRequest, 'id'>[];
+  answers?: Record<string, any>;
+  score?: number;
+  timeSpent?: number; // in seconds
 }
 
 export interface ActivityResponse {
-  score: number;
-  feedback: string;
-  nextActivityId?: string;
-  achievements?: Achievement[];
+  success: boolean;
+  progress: {
+    id: string;
+    activityId: string;
+    childId: string;
+    status: string;
+    score: number;
+    timeSpent: number;
+    completedAt: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  activity: {
+    id: string;
+    title: string;
+    subject: string;
+  };
+  planProgress: {
+    completedActivities: number;
+    totalActivities: number;
+    completionPercentage: number;
+    isPlanCompleted: boolean;
+  };
+  message: string;
 }
 
 export interface Achievement {

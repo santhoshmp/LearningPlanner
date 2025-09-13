@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Child Dashboard API</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .button:hover { background: #0056b3; }
+        .code { background: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; white-space: pre-wrap; border: 1px solid #e9ecef; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Child Dashboard API Debug Tool</h1>
+        <p>This tool helps debug the CORS and API issues with the child dashboard.</p>
+        
+        <div class="status info">
+            <strong>Issue:</strong> Child login succeeds but dashboard API call fails with CORS error, causing redirect loop.
+        </div>
+        
+        <button class="button" onclick="checkSession()">1. Check Current Session</button>
+        <button class="button" onclick="testChildLogin()">2. Test Child Login</button>
+        <button class="button" onclick="testDashboardAPI()">3. Test Dashboard API</button>
+        <button class="button" onclick="testCORS()">4. Test CORS</button>
+        <button class="button" onclick="clearAll()">🧹 Clear All</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api';
+        
+        function updateResults(type, title, content) {
+            const resultsDiv = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            resultsDiv.innerHTML += '<div class="container"><h3>' + title + ' [' + timestamp + ']</h3><div class="status ' + type + '">' + content + '</div></div>';
+        }
+        
+        function checkSession() {
+            const session = {
+                accessToken: localStorage.getItem('accessToken'),
+                refreshToken: localStorage.getItem('refreshToken'),
+                user: localStorage.getItem('user'),
+                userRole: localStorage.getItem('userRole'),
+                loginTime: localStorage.getItem('loginTime')
+            };
+            
+            let user = null;
+            try {
+                user = JSON.parse(session.user || '{}');
+            } catch (e) {
+                user = { error: 'Invalid user data' };
+            }
+            
+            const hasValidSession = session.accessToken && session.user && session.userRole;
+            
+            updateResults(
+                hasValidSession ? 'success' : 'error',
+                '1. Session Check',
+                '<strong>Session Status:</strong> ' + (hasValidSession ? '✅ Valid' : '❌ Invalid') + '<br>' +
+                '<strong>User ID:</strong> ' + (user.id || 'Not found') + '<br>' +
+                '<strong>User Role:</strong> ' + (session.userRole || 'Not found') + '<br>' +
+                '<strong>Access Token:</strong> ' + (session.accessToken ? 'Present' : 'Missing') + '<br>' +
+                '<strong>Login Time:</strong> ' + (session.loginTime || 'Not found') + '<br>' +
+                '<div class="code">User Data: ' + JSON.stringify(user, null, 2) + '</div>'
+            );
+        }
+        
+        async function testChildLogin() {
+            try {
+                updateResults('info', '2. Child Login Test', 'Attempting child login...');
+                
+                const response = await fetch(API_BASE + '/auth/child-login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'testchild',
+                        pin: '1234'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('accessToken', data.accessToken);
+                    localStorage.setItem('refreshToken', data.refreshToken);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    localStorage.setItem('userRole', 'child');
+                    localStorage.setItem('loginTime', new Date().toISOString());
+                    
+                    updateResults('success', '2. Child Login Test', 
+                        '✅ Login successful!<br>' +
+                        '<strong>User ID:</strong> ' + data.user.id + '<br>' +
+                        '<strong>Username:</strong> ' + data.user.username + '<br>' +
+                        '<strong>Role:</strong> ' + data.user.role + '<br>' +
+                        '<div class="code">Response: ' + JSON.stringify(data, null, 2) + '</div>'
+                    );
+                } else {
+                    updateResults('error', '2. Child Login Test', 
+                        '❌ Login failed!<br>' +
+                        '<strong>Status:</strong> ' + response.status + '<br>' +
+                        '<div class="code">Error: ' + JSON.stringify(data, null, 2) + '</div>'
+                    );
+                }
+            } catch (error) {
+                updateResults('error', '2. Child Login Test', 
+                    '❌ Network error!<br>' +
+                    '<div class="code">Error: ' + error.message + '</div>'
+                );
+            }
+        }
+        
+        async function testDashboardAPI() {
+            const accessToken = localStorage.getItem('accessToken');
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            if (!accessToken || !user.id) {
+                updateResults('error', '3. Dashboard API Test', '❌ No valid session found. Please login first.');
+                return;
+            }
+            
+            try {
+                updateResults('info', '3. Dashboard API Test', 'Testing dashboard API for user: ' + user.id);
+                
+                const response = await fetch(API_BASE + '/child/' + user.id + '/dashboard', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken,
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateResults('success', '3. Dashboard API Test', 
+                        '✅ Dashboard API successful!<br>' +
+                        '<div class="code">Response: ' + JSON.stringify(data, null, 2) + '</div>'
+                    );
+                } else {
+                    updateResults('error', '3. Dashboard API Test', 
+                        '❌ Dashboard API failed!<br>' +
+                        '<strong>Status:</strong> ' + response.status + '<br>' +
+                        '<strong>Status Text:</strong> ' + response.statusText + '<br>' +
+                        '<div class="code">Error: ' + JSON.stringify(data, null, 2) + '</div>'
+                    );
+                }
+            } catch (error) {
+                updateResults('error', '3. Dashboard API Test', 
+                    '❌ Network/CORS error!<br>' +
+                    '<strong>This is likely the CORS issue!</strong><br>' +
+                    '<div class="code">Error: ' + error.message + '</div>'
+                );
+            }
+        }
+        
+        function clearAll() {
+            localStorage.clear();
+            document.getElementById('results').innerHTML = '';
+            updateResults('success', 'Clear All', '🧹 All data cleared!');
+        }
+        
+        document.addEventListener('DOMContentLoaded', checkSession);
+    </script>
+</body>
+</html>

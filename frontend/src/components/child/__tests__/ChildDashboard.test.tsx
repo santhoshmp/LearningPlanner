@@ -23,45 +23,79 @@ jest.mock('../../../services/realTimeProgressService', () => ({
   })
 }));
 
-const mockChildData = {
-  id: 'child-1',
-  name: 'Test Child',
-  age: 8,
-  grade: '3rd Grade',
-  avatar: '/avatars/child1.png',
+const mockDashboardData = {
+  child: {
+    id: 'child-1',
+    name: 'Test Child',
+    age: 8,
+    grade: '3rd Grade',
+    skillProfile: {}
+  },
+  progressSummary: {
+    totalActivities: 15,
+    completedActivities: 10,
+    inProgressActivities: 3,
+    totalTimeSpent: 2400,
+    averageScore: 85,
+    weeklyGoalProgress: 70,
+    monthlyGoalProgress: 45,
+    lastActivityDate: new Date('2024-01-15'),
+    subjectProgress: [],
+    currentDailyStreak: 5,
+    longestDailyStreak: 12,
+    activityCompletionStreak: 3,
+    perfectScoreStreak: 2,
+    helpFreeStreak: 1
+  },
   studyPlans: [
     {
       id: 'plan-1',
-      title: 'Math Adventures',
-      progress: 60,
+      childId: 'child-1',
+      subject: 'Mathematics',
+      grade: '3rd Grade',
+      difficulty: 'intermediate' as const,
+      objectives: [{ id: '1', description: 'Basic arithmetic', completed: true }],
+      activities: [],
+      selectedTopics: [],
+      status: 'active' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       totalActivities: 10,
       completedActivities: 6,
-      isActive: true
+      inProgressActivities: 2,
+      progressPercentage: 60,
+      totalTimeSpent: 1800,
+      averageScore: 88
     },
     {
       id: 'plan-2',
-      title: 'Reading Fun',
-      progress: 80,
+      childId: 'child-1',
+      subject: 'Reading',
+      grade: '3rd Grade',
+      difficulty: 'beginner' as const,
+      objectives: [{ id: '2', description: 'Reading comprehension', completed: false }],
+      activities: [],
+      selectedTopics: [],
+      status: 'active' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       totalActivities: 5,
       completedActivities: 4,
-      isActive: false
+      inProgressActivities: 1,
+      progressPercentage: 80,
+      totalTimeSpent: 600,
+      averageScore: 92
     }
   ],
-  badges: [
+  currentStreaks: [
     {
-      id: 'badge-1',
-      name: 'Math Star',
-      icon: '⭐',
-      earnedAt: new Date('2024-01-15'),
-      category: 'math'
-    }
-  ],
-  learningStreak: {
-    current: 5,
-    longest: 12,
-    type: 'daily'
-  }
-};
+      id: '1',
+      type: 'DAILY',
+      currentCount: 5,
+      longestCount: 12,
+      isActive: true,
+      lastActivityDate: new Date('2024-01-15'),
+      streakStartDat
 
 const renderWithProviders = (component: React.ReactElement) => {
   const queryClient = new QueryClient({

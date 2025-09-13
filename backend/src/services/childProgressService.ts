@@ -229,7 +229,12 @@ class ChildProgressService {
 
       // Update learning streaks if activity was completed
       if (progressUpdate.status === ProgressStatus.COMPLETED) {
-        await this.updateLearningStreaks(childId, activity.plan.subject, progressUpdate.score || 0);
+        await this.updateLearningStreaks(
+          childId, 
+          activity.plan.subject, 
+          progressUpdate.score || 0,
+          progressUpdate.helpRequestsCount || 0
+        );
       }
 
       // Invalidate cached progress data after update
@@ -250,32 +255,40 @@ class ChildProgressService {
   async updateLearningStreaks(
     childId: string,
     subject: string,
-    score: number
+    score: number,
+    helpRequestsCount: number = 0
   ): Promise<void> {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Update daily streak
+      // Update daily streak - tracks consecutive days with completed activities
       await this.updateStreakByType(childId, StreakType.DAILY, today);
 
-      // Update weekly streak
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay());
+      // Update weekly streak - tracks consecutive weeks with completed activities
+      const weekStart = this.getWeekStart(today);
       await this.updateStreakByType(childId, StreakType.WEEKLY, weekStart);
 
-      // Update activity completion streak
+      // Update activity completion streak - tracks consecutive completed activities
       await this.updateStreakByType(childId, StreakType.ACTIVITY_COMPLETION, today);
 
       // Update perfect score streak if applicable
       if (score >= 100) {
         await this.updateStreakByType(childId, StreakType.PERFECT_SCORE, today);
       } else {
-        // Reset perfect score streak
-        await this.resetStreak(childId, StreakType.PERFECT_SCORE);
+        // Only reset perfect score streak if it was active
+        await this.conditionallyResetStreak(childId, StreakType.PERFECT_SCORE);
       }
 
-      logger.info(`Learning streaks updated for child ${childId}`);
+      // Update help-free streak if no help was requested
+      if (helpRequestsCount === 0) {
+        await this.updateStreakByType(childId, StreakType.HELP_FREE, today);
+      } else {
+        // Only reset help-free streak if it was active
+        await this.conditionallyResetStreak(childId, StreakType.HELP_FREE);
+      }
+
+      logger.info(`Learning streaks updated for child ${childId}: daily, weekly, activity completion, perfect score (${score >= 100}), help-free (${helpRequestsCount === 0})`);
 
     } catch (error) {
       logger.error('Error updating learning streaks:', error);
@@ -314,31 +327,47 @@ class ChildProgressService {
             isActive: true
           }
         });
+        logger.debug(`Created new ${streakType} streak for child ${childId}`);
         return;
       }
 
       // Check if streak should continue or reset
       const lastActivityDate = existingStreak.lastActivityDate;
       let shouldContinueStreak = false;
+      let shouldIncrement = false;
 
       if (lastActivityDate) {
-        const daysDiff = Math.floor((activityDate.getTime() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24));
+        const timeDiff = activityDate.getTime() - lastActivityDate.getTime();
+        const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
         
         if (streakType === StreakType.DAILY) {
-          shouldContinueStreak = daysDiff === 1 || daysDiff === 0;
+          // Daily streak: continue if same day or next day, increment only on new day
+          shouldContinueStreak = daysDiff >= 0 && daysDiff <= 1;
+          shouldIncrement = daysDiff === 1;
         } else if (streakType === StreakType.WEEKLY) {
-          shouldContinueStreak = daysDiff <= 7;
-        } else {
-          shouldContinueStreak = daysDiff <= 1;
+          // Weekly streak: continue if within same week or next week
+          const lastWeekStart = this.getWeekStart(lastActivityDate);
+          const currentWeekStart = this.getWeekStart(activityDate);
+          const weeksDiff = Math.floor((currentWeekStart.getTime() - lastWeekStart.getTime()) / (1000 * 60 * 60 * 24 * 7));
+          
+          shouldContinueStreak = weeksDiff >= 0 && weeksDiff <= 1;
+          shouldIncrement = weeksDiff === 1;
+        } else if (streakType === StreakType.ACTIVITY_COMPLETION) {
+          // Activity completion streak: always increment (consecutive activities)
+          shouldContinueStreak = true;
+          shouldIncrement = true;
+        } else if (streakType === StreakType.PERFECT_SCORE || streakType === StreakType.HELP_FREE) {
+          // Perfect score and help-free streaks: increment on same day or new day
+          shouldContinueStreak = daysDiff >= 0;
+          shouldIncrement = true;
         }
+      } else {
+        // No previous activity date, start fresh
+        shouldContinueStreak = true;
+        shouldIncrement = true;
       }
 
-      if (shouldContinueStreak && lastActivityDate) {
-        const daysDiff = Math.floor((activityDate.getTime() - lastActivityDate.getTime()) / (1000 * 60 * 60 * 24));
-        
-        // Only increment if it's a new day/period
-        const shouldIncrement = daysDiff > 0;
-        
+      if (shouldContinueStreak) {
         const newCount = shouldIncrement ? existingStreak.currentCount + 1 : existingStreak.currentCount;
         const newLongestCount = Math.max(existingStreak.longestCount, newCount);
 
@@ -351,8 +380,10 @@ class ChildProgressService {
             isActive: true
           }
         });
+        
+        logger.debug(`Updated ${streakType} streak for child ${childId}: ${existingStreak.currentCount} -> ${newCount}`);
       } else {
-        // Reset streak
+        // Reset streak and start new one
         await this.prisma.learningStreak.update({
           where: { id: existingStreak.id },
           data: {
@@ -362,6 +393,8 @@ class ChildProgressService {
             isActive: true
           }
         });
+        
+        logger.debug(`Reset ${streakType} streak for child ${childId}, starting new streak`);
       }
 
     } catch (error) {
@@ -385,10 +418,52 @@ class ChildProgressService {
           isActive: false
         }
       });
+      logger.debug(`Reset ${streakType} streak for child ${childId}`);
     } catch (error) {
       logger.error(`Error resetting ${streakType} streak:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Conditionally reset a streak only if it was active
+   */
+  private async conditionallyResetStreak(childId: string, streakType: StreakType): Promise<void> {
+    try {
+      const existingStreak = await this.prisma.learningStreak.findUnique({
+        where: {
+          childId_streakType: {
+            childId,
+            streakType
+          }
+        }
+      });
+
+      // Only reset if streak exists and is currently active with a count > 0
+      if (existingStreak && existingStreak.isActive && existingStreak.currentCount > 0) {
+        await this.prisma.learningStreak.update({
+          where: { id: existingStreak.id },
+          data: {
+            currentCount: 0,
+            isActive: false
+          }
+        });
+        logger.debug(`Conditionally reset ${streakType} streak for child ${childId}`);
+      }
+    } catch (error) {
+      logger.error(`Error conditionally resetting ${streakType} streak:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the start of the week (Sunday) for a given date
+   */
+  private getWeekStart(date: Date): Date {
+    const weekStart = new Date(date);
+    weekStart.setDate(date.getDate() - date.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    return weekStart;
   }
 
   /**
