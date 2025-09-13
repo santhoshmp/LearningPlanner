@@ -7,8 +7,27 @@ A comprehensive educational platform designed for children and their parents, fe
 This project is **open source** and available under the MIT License. We welcome contributions from the community to help improve educational technology for children worldwide.
 
 - **License**: MIT License (see [LICENSE](LICENSE) file)
-- **Contributions**: Pull requests and issues are welcome
-- **Community**: Join us in building better educational tools for the next generation
+- **Contributing**: See our [Contributing Guide](CONTRIBUTING.md) for development setup and guidelines
+- **Code of Conduct**: Please read our [Code of Conduct](CODE_OF_CONDUCT.md) to understand our community standards
+- **Issues**: Report bugs and request features through [GitHub Issues](https://github.com/santhoshmp/LearningPlanner/issues)
+- **Discussions**: Join community discussions and ask questions in [GitHub Discussions](https://github.com/santhoshmp/LearningPlanner/discussions)
+
+### 🤝 How to Contribute
+
+1. **Fork the repository** and create a feature branch
+2. **Follow our coding standards** and write comprehensive tests
+3. **Ensure accessibility compliance** (WCAG 2.1 AA) for UI components
+4. **Prioritize child safety** in all contributions
+5. **Submit a pull request** with detailed description of changes
+
+We especially welcome contributions in:
+- Accessibility improvements and WCAG compliance
+- Mobile optimization and responsive design
+- Internationalization and localization
+- Educational content creation tools
+- AI integration enhancements
+- Performance optimizations
+- Security and privacy improvements
 
 > **Latest Update**: Enhanced child authentication system with improved session management and corruption detection, comprehensive child analytics dashboard with learning streaks and progress visualization, advanced badge system with 15+ categories and celebration animations, real-time progress tracking with offline sync capabilities, mobile-optimized components with touch-friendly interfaces, and robust error handling with defensive programming patterns. The platform now features complete gamification system, accessibility compliance (WCAG 2.1 AA), comprehensive testing coverage (95%+), and production-ready deployment configurations with Docker orchestration.
 
