@@ -4,7 +4,7 @@ import path from 'path'
 import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     // Add visualizer plugin to analyze bundle size (generates stats.html)
@@ -14,6 +14,9 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'http://localhost:3001/api'),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -22,7 +25,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
-    strictPort: true, // Don't try other ports if 3000 is occupied
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
@@ -31,7 +34,6 @@ export default defineConfig({
     },
   },
   build: {
-    // Enable minification
     minify: 'terser',
     terserOptions: {
       compress: {
@@ -39,10 +41,8 @@ export default defineConfig({
         drop_debugger: true,
       },
     },
-    // Configure code splitting
     rollupOptions: {
       output: {
-        // Chunk by module category
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
             if (id.includes('@mui')) {
@@ -56,17 +56,13 @@ export default defineConfig({
             }
           }
         },
-        // Ensure chunks are reasonably sized
         chunkSizeWarningLimit: 1000,
       },
     },
-    // Enable source maps for production (can be disabled for smaller bundles)
     sourcemap: false,
-    // Ensure CSS is optimized
     cssCodeSplit: true,
   },
-  // Optimize dependencies
   optimizeDeps: {
     include: ['react', 'react-dom', '@mui/material', '@emotion/react', '@emotion/styled'],
   },
-})
+}))
