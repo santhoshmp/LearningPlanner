@@ -1,0 +1,41 @@
+{
+  "name": "ai-study-planner",
+  "version": "1.0.0",
+  "description": "AI-powered educational platform for children with comprehensive parental controls",
+  "main": "index.js",
+  "scripts": {
+    "start": "npm run start:backend",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "test": "cd backend && npm test && cd ../frontend && npm test",
+    "deploy:railway": "npm run build",
+    "postinstall": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "education",
+    "ai",
+    "children",
+    "learning",
+    "parental-controls",
+    "hackathon"
+  ],
+  "author": "AI Study Planner Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ai-study-planner.git"
+  },
+  "homepage": "https://github.com/yourusername/ai-study-planner#readme"
+}

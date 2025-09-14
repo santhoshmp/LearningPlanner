@@ -1,0 +1,67 @@
+# Simplified Docker Compose for Hackathon Demo
+# Works without external API keys or services
+
+version: '3.8'
+
+services:
+  # Backend API with SQLite (no external database needed)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-study-planner-backend-demo
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:./dev.db
+      JWT_SECRET: hackathon_jwt_secret_2024_secure_key
+      JWT_REFRESH_SECRET: hackathon_refresh_secret_2024_secure_key
+      CORS_ORIGIN: "*"
+      PORT: 3001
+      LOG_LEVEL: info
+      DEMO_MODE: "true"
+      ENABLE_MOCK_DATA: "true"
+      EMAIL_FROM: noreply@aistudyplanner.com
+      OAUTH_ENCRYPTION_KEY: hackathon_oauth_key_32_chars_minimum_length
+      CONTENT_SAFETY_ENABLED: "true"
+    volumes:
+      - ./backend/dev.db:/app/dev.db
+      - ./backend/uploads:/app/uploads
+    networks:
+      - app-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: ai-study-planner-frontend-demo
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: always
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ai-study-planner-nginx-demo
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d/aws.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - app-network
+    restart: always
+
+networks:
+  app-network:
+    driver: bridge

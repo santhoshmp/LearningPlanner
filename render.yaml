@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: ai-study-planner
+    env: node
+    plan: free
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        value: hackathon_jwt_secret_2024_secure_key_for_demo_purposes
+      - key: JWT_REFRESH_SECRET
+        value: hackathon_refresh_secret_2024_secure_key_for_demo_purposes
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: PORT
+        value: 3001
+      - key: LOG_LEVEL
+        value: info
+      - key: DEMO_MODE
+        value: "true"
+      - key: ENABLE_MOCK_DATA
+        value: "true"
+
+databases:
+  - name: ai-study-planner-db
+    databaseName: ai_study_planner
+    user: postgres
+    plan: free

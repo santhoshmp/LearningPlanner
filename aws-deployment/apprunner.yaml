@@ -1,0 +1,19 @@
+version: 1.0
+runtime: docker
+build:
+  commands:
+    build:
+      - echo "Building AI Study Planner for AWS App Runner"
+      - docker build -t ai-study-planner-backend ./backend
+      - docker build -t ai-study-planner-frontend ./frontend
+run:
+  runtime-version: latest
+  command: docker-compose -f docker-compose.aws.yml up
+  network:
+    port: 80
+    env: PORT
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: PORT
+      value: 80
