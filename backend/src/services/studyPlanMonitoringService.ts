@@ -473,5 +473,4 @@ class StudyPlanMonitoringService {
     const since = new Date(Date.now() - minutes * 60 * 1000);
     return this.getAccessLogsForChild(childId, since);
   }
-
-  private calculateAverageResponseTime
+}
