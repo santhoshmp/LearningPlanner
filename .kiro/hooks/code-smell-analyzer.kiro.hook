@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Code Smell Analyzer",
+  "description": "Analyzes saved code files for common code smells, stylistic issues, and provides suggestions for improvement including overly complex functions, repeated code blocks, and confusing variable names",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the following code file for common code smells and stylistic issues. Look specifically for:\n\n1. **Overly Complex Functions**: Functions that are too long, have too many parameters, or have high cyclomatic complexity\n2. **Repeated Code Blocks**: Duplicated logic that could be extracted into reusable functions\n3. **Confusing Variable Names**: Variables with unclear, abbreviated, or misleading names\n4. **Other Code Smells**: Long parameter lists, deeply nested code, magic numbers, inconsistent naming conventions\n\nFor each issue found, provide:\n- A clear description of the problem\n- The specific location (line numbers if possible)\n- A suggested improvement with explanation of why the change is beneficial\n- Example of better code when helpful\n\nFocus on actionable feedback that improves code maintainability, readability, and performance. Do not make the changes automatically - only provide suggestions as comments.\n\nFile content:\n{file_content}"
+  }
+}

@@ -125,8 +125,8 @@ Cypress.Commands.add('completeActivity', (options = {}) => {
       });
       cy.get('[data-testid="submit-activity"]').click();
     } else {
-      // Generic activity completion
-      cy.get('[data-testid="complete-activity"]').click();
+      // Generic activity completion - look for the completion button with correct text
+      cy.get('button').contains('Mark as Complete ✓').click();
     }
   });
   

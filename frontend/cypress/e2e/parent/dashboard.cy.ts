@@ -53,29 +53,41 @@ describe('Parent Dashboard Responsive Tests', () => {
     // Visit the dashboard
     cy.visit('/dashboard');
     
-    // Wait for dashboard to load
+    // Wait for dashboard to load and verify new header structure
+    cy.contains('Study Plan Pro').should('be.visible');
     cy.contains('Dashboard').should('be.visible');
   });
   
-  it('should display responsive navigation', () => {
-    // Test responsive behavior of navigation
+  it('should display responsive navigation with new header structure', () => {
+    // Test the new header structure with tabs
+    cy.get('[role="tablist"]').should('be.visible');
+    
+    // Verify all tabs are present
+    cy.get('[role="tab"]').should('have.length', 3);
+    cy.contains('[role="tab"]', 'Dashboard').should('be.visible');
+    cy.contains('[role="tab"]', 'Study Plans').should('be.visible');
+    cy.contains('[role="tab"]', 'Reports').should('be.visible');
+    
+    // Test responsive behavior of header
     cy.testResponsive(() => {
-      // On mobile, the hamburger menu should be visible
+      // Header should always be visible
+      cy.contains('Study Plan Pro').should('be.visible');
+      
+      // User action buttons should be visible
+      cy.contains('Make a copy').should('be.visible');
+      cy.contains('Share').should('be.visible');
+      
+      // Icon buttons should be present
+      cy.get('[aria-label="User Profile"]').should('be.visible');
+      cy.get('[aria-label="Log Out"]').should('be.visible');
+      
       if (Cypress.viewportWidth < 768) {
-        cy.get('.mobile-menu-button').should('be.visible');
-        cy.get('.desktop-nav').should('not.be.visible');
-        
-        // Open mobile menu
-        cy.get('.mobile-menu-button').click();
-        cy.get('.mobile-nav').should('be.visible');
-        
-        // Close mobile menu
-        cy.get('.close-menu-button').click();
-        cy.get('.mobile-nav').should('not.be.visible');
+        // On mobile, tabs might stack or scroll
+        cy.get('[role="tablist"]').should('be.visible');
       } else {
-        // On desktop, the full navigation should be visible
-        cy.get('.desktop-nav').should('be.visible');
-        cy.get('.mobile-menu-button').should('not.exist');
+        // On desktop, all tabs should be visible in a row
+        cy.get('[role="tablist"]').should('be.visible');
+        cy.get('[role="tab"]').should('have.length', 3);
       }
     });
   });
@@ -134,23 +146,60 @@ describe('Parent Dashboard Responsive Tests', () => {
   });
   
   it('should verify breakpoint behavior for specific elements', () => {
-    // Verify visibility of elements at different breakpoints
-    cy.verifyBreakpointVisibility('.mobile-menu-button', {
-      mobile: true,
-      tablet: true,
-      desktop: false,
-    });
-    
-    cy.verifyBreakpointVisibility('.desktop-nav', {
-      mobile: false,
-      tablet: false,
-      desktop: true,
-    });
-    
-    cy.verifyBreakpointVisibility('.dashboard-summary', {
+    // Verify visibility of new header elements at different breakpoints
+    cy.verifyBreakpointVisibility('[aria-label="User Profile"]', {
       mobile: true,
       tablet: true,
       desktop: true,
     });
+    
+    cy.verifyBreakpointVisibility('[aria-label="Log Out"]', {
+      mobile: true,
+      tablet: true,
+      desktop: true,
+    });
+    
+    cy.verifyBreakpointVisibility('[role="tablist"]', {
+      mobile: true,
+      tablet: true,
+      desktop: true,
+    });
+    
+    // Test tab functionality
+    cy.contains('[role="tab"]', 'Study Plans').click();
+    cy.contains('Safety & Security Monitoring').should('be.visible');
+    
+    cy.contains('[role="tab"]', 'Reports').click();
+    cy.contains('Detailed Learning Analytics').should('be.visible');
+    
+    cy.contains('[role="tab"]', 'Dashboard').click();
+    cy.get('[data-testid="parent-progress-dashboard"]').should('be.visible');
+  });
+  
+  it('should test new user action buttons', () => {
+    // Test Make a copy button
+    cy.contains('Make a copy').should('be.visible').click();
+    
+    // Test Share button
+    cy.contains('Share').should('be.visible').click();
+    
+    // Test Profile icon button
+    cy.get('[aria-label="User Profile"]').should('be.visible').click();
+    
+    // Test Logout icon button
+    cy.get('[aria-label="Log Out"]').should('be.visible').click();
+  });
+  
+  it('should verify tooltip functionality', () => {
+    // Test tooltips on icon buttons
+    cy.get('[aria-label="User Profile"]').trigger('mouseover');
+    cy.contains('User Profile').should('be.visible');
+    
+    cy.get('[aria-label="Log Out"]').trigger('mouseover');
+    cy.contains('Log Out').should('be.visible');
+    
+    // Test tooltip on Make a copy button
+    cy.contains('Make a copy').trigger('mouseover');
+    cy.contains('Make a copy').should('be.visible');
   });
 });

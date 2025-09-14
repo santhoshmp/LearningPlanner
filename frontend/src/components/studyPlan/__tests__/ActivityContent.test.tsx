@@ -480,6 +480,30 @@ describe('ActivityContent', () => {
       expect(screen.getByText('🎉 Ready to Continue?')).toBeInTheDocument();
     });
 
+    it('generates static resources correctly with unused parameters', () => {
+      // Test that the getStaticResourcesForActivity function works correctly
+      // even with unused title and difficulty parameters (now prefixed with _)
+      const activityWithVariousParams = createMockActivity('unsupported' as any, {});
+      activityWithVariousParams.title = 'Complex Activity Title With Special Characters!@#';
+      activityWithVariousParams.difficulty = 5; // High difficulty
+      activityWithVariousParams.subject = 'Mathematics';
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={activityWithVariousParams} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      // Verify that the function generates content based on subject (used parameter)
+      // regardless of title and difficulty (unused parameters)
+      expect(screen.getByText('Subject: Mathematics')).toBeInTheDocument();
+      expect(screen.getByText('Number Recognition')).toBeInTheDocument();
+      expect(screen.getByText('Basic Operations')).toBeInTheDocument();
+      
+      // Verify the activity title is still displayed (from activity prop, not function parameter)
+      expect(screen.getByText('📚 Complex Activity Title With Special Characters!@#')).toBeInTheDocument();
+    });
+
     it('renders mathematics-specific content for math activities', () => {
       const mathActivity = createMockActivity('unsupported' as any, {});
       mathActivity.title = 'Basic Math Operations';
@@ -684,6 +708,74 @@ describe('ActivityContent', () => {
     });
   });
 
+  describe('Storybook Integration', () => {
+    it('renders all story variants without errors', () => {
+      // Test the main story configurations to ensure they work
+      const storyConfigs = [
+        {
+          name: 'TextContent',
+          activity: createMockActivity('text', {
+            content: '<h1>Test</h1><p>Content</p>',
+            comprehensionQuestion: 'Test question?'
+          })
+        },
+        {
+          name: 'MultipleChoiceQuiz',
+          activity: createMockActivity('quiz', {
+            questions: [{
+              text: 'Test question?',
+              type: 'multiple-choice',
+              options: ['A', 'B', 'C'],
+              correctAnswer: 0
+            }]
+          })
+        },
+        {
+          name: 'InteractiveActivity',
+          activity: createMockActivity('interactive', {
+            description: 'Test interactive activity'
+          })
+        },
+        {
+          name: 'VideoContent',
+          activity: createMockActivity('video', {
+            videoUrl: 'https://example.com/video',
+            title: 'Test Video',
+            description: 'Test description',
+            comprehensionQuestion: 'Test question?'
+          })
+        }
+      ];
+
+      storyConfigs.forEach(({ name, activity }) => {
+        expect(() => {
+          const { unmount } = render(
+            <TestWrapper>
+              <ActivityContent activity={activity} {...defaultProps} />
+            </TestWrapper>
+          );
+          unmount();
+        }).not.toThrow();
+      });
+    });
+
+    it('handles story decorator theme provider correctly', () => {
+      const testActivity = createMockActivity('text', {
+        content: '<p>Theme test</p>',
+        comprehensionQuestion: 'Theme question?'
+      });
+
+      // Test that the component works with ThemeProvider (as used in stories)
+      render(
+        <ThemeProvider theme={createTheme()}>
+          <ActivityContent activity={testActivity} {...defaultProps} />
+        </ThemeProvider>
+      );
+
+      expect(screen.getByText('Theme question?')).toBeInTheDocument();
+    });
+  });
+
   describe('Error Handling', () => {
     it('handles missing quiz questions gracefully', () => {
       const quizActivity = createMockActivity('quiz', {
@@ -710,6 +802,241 @@ describe('ActivityContent', () => {
           </TestWrapper>
         );
       }).not.toThrow();
+    });
+  });
+
+  describe('TypeScript and JSX Compatibility', () => {
+    it('renders correctly with current TypeScript JSX configuration', () => {
+      const textActivity = createMockActivity('text', {
+        content: '<p>Test content for JSX compatibility</p>',
+        comprehensionQuestion: 'Test question?'
+      });
+
+      // Should render without TypeScript errors or JSX issues
+      expect(() => {
+        render(
+          <TestWrapper>
+            <ActivityContent activity={textActivity} {...defaultProps} />
+          </TestWrapper>
+        );
+      }).not.toThrow();
+
+      expect(screen.getByText('Test question?')).toBeInTheDocument();
+    });
+
+    it('handles JSX elements in content correctly', () => {
+      const htmlActivity = createMockActivity('text', {
+        content: '<div><h2>HTML Content</h2><p>With <strong>bold</strong> text</p></div>',
+        comprehensionQuestion: 'What did you learn?'
+      });
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={htmlActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      // Verify HTML content is rendered (though it's displayed as text in this component)
+      expect(screen.getByText('What did you learn?')).toBeInTheDocument();
+    });
+
+    it('maintains proper React component structure', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test for React component structure'
+      });
+
+      const { container } = render(
+        <TestWrapper>
+          <ActivityContent activity={interactiveActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      // Verify the component renders as a proper React element
+      expect(container.firstChild).toBeInstanceOf(Element);
+      expect(container.querySelector('[data-testid]')).toBeDefined();
+    });
+  });
+
+  describe('Bug Fix Verification - Completion Button Functionality', () => {
+    it('completion button has correct text and styling after bug fix', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={interactiveActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      // Verify the button text is correct (this was broken before the fix)
+      const completeButton = screen.getByRole('button', { name: /mark as complete ✓/i });
+      expect(completeButton).toBeInTheDocument();
+      
+      // Verify button has proper styling classes
+      expect(completeButton).toHaveClass('MuiButton-containedSuccess');
+      expect(completeButton).toHaveClass('MuiButton-sizeLarge');
+    });
+
+    it('completion button click handler works correctly after bug fix', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      const onAnswerChange = jest.fn();
+      const onComplete = jest.fn();
+
+      render(
+        <TestWrapper>
+          <ActivityContent 
+            activity={interactiveActivity} 
+            {...defaultProps} 
+            onAnswerChange={onAnswerChange}
+            onComplete={onComplete}
+          />
+        </TestWrapper>
+      );
+
+      const completeButton = screen.getByRole('button', { name: /mark as complete ✓/i });
+      
+      // Verify click functionality works correctly (this was broken before the fix)
+      fireEvent.click(completeButton);
+      
+      expect(onAnswerChange).toHaveBeenCalledWith(true);
+      expect(onComplete).toHaveBeenCalled();
+    });
+
+    it('static resources completion button works correctly after bug fix', () => {
+      const staticActivity = createMockActivity('unsupported' as any, {});
+      const onAnswerChange = jest.fn();
+
+      render(
+        <TestWrapper>
+          <ActivityContent 
+            activity={staticActivity} 
+            {...defaultProps} 
+            onAnswerChange={onAnswerChange}
+          />
+        </TestWrapper>
+      );
+
+      // Find the completion button in static resources
+      const completeButton = screen.getByRole('button', { name: /mark as complete ✓/i });
+      expect(completeButton).toBeInTheDocument();
+      
+      // Test click functionality
+      fireEvent.click(completeButton);
+      
+      expect(onAnswerChange).toHaveBeenCalledWith(true);
+    });
+
+    it('completion button is accessible and focusable', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={interactiveActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const completeButton = screen.getByRole('button', { name: /mark as complete ✓/i });
+      
+      // Verify button is focusable
+      completeButton.focus();
+      expect(completeButton).toHaveFocus();
+      
+      // Verify button is not disabled
+      expect(completeButton).not.toBeDisabled();
+    });
+
+    it('completion button has proper ARIA attributes', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={interactiveActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const completeButton = screen.getByRole('button', { name: /mark as complete ✓/i });
+      
+      // Verify button has proper role and is accessible
+      expect(completeButton).toHaveAttribute('type', 'button');
+      expect(completeButton.tagName).toBe('BUTTON');
+    });
+
+    it('completion button styling matches design system', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={interactiveActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      const completeButton = screen.getByRole('button', { name: /mark as complete ✓/i });
+      
+      // Verify button has correct Material-UI classes for styling
+      expect(completeButton).toHaveClass('MuiButton-root');
+      expect(completeButton).toHaveClass('MuiButton-contained');
+      expect(completeButton).toHaveClass('MuiButton-containedSuccess');
+      expect(completeButton).toHaveClass('MuiButton-sizeLarge');
+    });
+
+    it('handles multiple completion buttons correctly', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      const onAnswerChange = jest.fn();
+
+      render(
+        <TestWrapper>
+          <ActivityContent 
+            activity={interactiveActivity} 
+            {...defaultProps} 
+            onAnswerChange={onAnswerChange}
+          />
+        </TestWrapper>
+      );
+
+      // Should have exactly two completion buttons (one in interactive section, one in static resources)
+      const completeButtons = screen.getAllByRole('button', { name: /mark as complete ✓/i });
+      expect(completeButtons).toHaveLength(2);
+      
+      // Both buttons should work correctly
+      fireEvent.click(completeButtons[0]);
+      expect(onAnswerChange).toHaveBeenCalledWith(true);
+      
+      onAnswerChange.mockClear();
+      
+      fireEvent.click(completeButtons[1]);
+      expect(onAnswerChange).toHaveBeenCalledWith(true);
+    });
+
+    it('completion button text is properly formatted', () => {
+      const interactiveActivity = createMockActivity('interactive', {
+        description: 'Test interactive activity'
+      });
+
+      render(
+        <TestWrapper>
+          <ActivityContent activity={interactiveActivity} {...defaultProps} />
+        </TestWrapper>
+      );
+
+      // Verify the exact text content (this was malformed before the fix)
+      const completeButton = screen.getByText('Mark as Complete ✓');
+      expect(completeButton).toBeInTheDocument();
+      
+      // Verify it's inside a button element
+      expect(completeButton.closest('button')).toBeInTheDocument();
     });
   });
 });

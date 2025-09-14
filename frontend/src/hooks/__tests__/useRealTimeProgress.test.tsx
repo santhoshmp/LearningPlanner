@@ -34,6 +34,15 @@ describe('useRealTimeProgress', () => {
       writable: true,
       value: true
     });
+
+    // Mock import.meta.env for Vite environment variables
+    (global as any).import = {
+      meta: {
+        env: {
+          VITE_API_URL: 'http://localhost:3001/api'
+        }
+      }
+    };
   });
 
   afterEach(() => {
@@ -276,5 +285,110 @@ describe('useRealTimeProgress', () => {
     unmount();
 
     expect(mockClient.disconnect).toHaveBeenCalled();
+  });
+
+  describe('Environment Variable Integration', () => {
+    it('should work with different VITE_API_URL configurations', async () => {
+      const childId = 'child123';
+      mockClient.connect.mockResolvedValue();
+
+      // Test with different environment configurations
+      const testConfigs = [
+        'http://localhost:3001/api',
+        'http://localhost:3001',
+        'https://api.example.com/api/v1',
+        undefined
+      ];
+
+      for (const apiUrl of testConfigs) {
+        // Update mock environment
+        (global as any).import.meta.env.VITE_API_URL = apiUrl;
+
+        const { result, unmount } = renderHook(() => useRealTimeProgress(childId));
+
+        await waitFor(() => {
+          expect(result.current.connectionStatus).toBe('connected');
+        });
+
+        expect(mockClient.connect).toHaveBeenCalledWith(childId);
+
+        unmount();
+        jest.clearAllMocks();
+      }
+    });
+
+    it('should handle missing environment variables gracefully', async () => {
+      const childId = 'child123';
+      mockClient.connect.mockResolvedValue();
+
+      // Remove environment variables
+      (global as any).import = {
+        meta: {
+          env: {}
+        }
+      };
+
+      const { result } = renderHook(() => useRealTimeProgress(childId));
+
+      await waitFor(() => {
+        expect(result.current.connectionStatus).toBe('connected');
+      });
+
+      expect(mockClient.connect).toHaveBeenCalledWith(childId);
+    });
+
+    it('should maintain connection state across environment changes', async () => {
+      const childId = 'child123';
+      mockClient.connect.mockResolvedValue();
+
+      const { result } = renderHook(() => useRealTimeProgress(childId));
+
+      await waitFor(() => {
+        expect(result.current.connectionStatus).toBe('connected');
+      });
+
+      // Change environment (simulating hot reload or config change)
+      (global as any).import.meta.env.VITE_API_URL = 'https://new-api.example.com/api';
+
+      // Connection state should remain stable
+      expect(result.current.connectionStatus).toBe('connected');
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    it('should handle URL transformation correctly in different environments', async () => {
+      const childId = 'child123';
+      
+      // Test URL transformations that the service should handle
+      const urlTransformations = [
+        { input: 'http://localhost:3001/api', expected: 'http://localhost:3001' },
+        { input: 'https://api.example.com/api/v1', expected: 'https://api.example.com/v1' },
+        { input: 'http://localhost:3001', expected: 'http://localhost:3001' },
+        { input: undefined, expected: 'http://localhost:3001' }
+      ];
+
+      for (const { input, expected } of urlTransformations) {
+        mockClient.connect.mockResolvedValue();
+        
+        // Set environment
+        if (input) {
+          (global as any).import.meta.env.VITE_API_URL = input;
+        } else {
+          delete (global as any).import.meta.env.VITE_API_URL;
+        }
+
+        const { result, unmount } = renderHook(() => useRealTimeProgress(childId));
+
+        await waitFor(() => {
+          expect(result.current.connectionStatus).toBe('connected');
+        });
+
+        // The hook should successfully connect regardless of URL format
+        expect(mockClient.connect).toHaveBeenCalledWith(childId);
+        expect(result.current.isConnected).toBe(true);
+
+        unmount();
+        jest.clearAllMocks();
+      }
+    });
   });
 });

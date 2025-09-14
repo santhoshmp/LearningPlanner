@@ -9,7 +9,7 @@ const meta: Meta<typeof ActivityContent> = {
   title: 'StudyPlan/ActivityContent',
   component: ActivityContent,
   decorators: [
-    (Story) => (
+    (Story: React.ComponentType) => (
       <ThemeProvider theme={theme}>
         <Story />
       </ThemeProvider>
@@ -345,6 +345,23 @@ export const QuizWithImage: Story = {
     docs: {
       description: {
         story: 'Quiz questions can include images to provide visual context for the question.',
+      },
+    },
+  },
+};
+
+export const CompletionButtonDemo: Story = {
+  args: {
+    activity: createMockActivity('interactive', {
+      description: 'This story demonstrates the completion button functionality that was fixed. The button should display "Mark as Complete ✓" and be fully functional.'
+    }),
+    currentStep: 0,
+    answers: {},
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Demonstrates the completion button functionality after the bug fix. The button should have proper text formatting, styling, and click handlers.',
       },
     },
   },

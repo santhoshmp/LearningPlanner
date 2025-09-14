@@ -58,7 +58,7 @@ export interface PerformanceMetrics {
   cpuUsage?: number;
 }
 
-class ChildStudyPlanMonitoringService {
+export class ChildStudyPlanMonitoringService {
   private performanceMetrics: Map<string, PerformanceMetrics[]> = new Map();
   private errorCounts: Map<string, number> = new Map();
   private lastCleanup: Date = new Date();
@@ -398,3 +398,6 @@ class ChildStudyPlanMonitoringService {
     }
   }
 }
+
+// Export singleton instance
+export const childStudyPlanMonitoringService = new ChildStudyPlanMonitoringService();

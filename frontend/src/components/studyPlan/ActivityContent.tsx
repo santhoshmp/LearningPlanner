@@ -1,12 +1,12 @@
 import React from 'react';
-import { 
-  Box, 
-  Typography, 
-  TextField, 
-  Radio, 
-  RadioGroup, 
-  FormControlLabel, 
-  FormControl, 
+import {
+  Box,
+  Typography,
+  TextField,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
   FormLabel,
   Paper,
   Card,
@@ -56,8 +56,8 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
 
     return (
       <Box>
-        <Box 
-          sx={{ 
+        <Box
+          sx={{
             typography: 'body1',
             '& h1, & h2, & h3, & h4, & h5, & h6': {
               color: 'primary.main',
@@ -81,16 +81,16 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
               }
             }
           }}
-          dangerouslySetInnerHTML={{ __html: data.content }} 
+          dangerouslySetInnerHTML={{ __html: data.content }}
         />
-        
+
         {/* Simple comprehension check */}
-        <Paper 
-          elevation={0} 
-          sx={{ 
-            mt: 4, 
-            p: 3, 
-            bgcolor: 'primary.light', 
+        <Paper
+          elevation={0}
+          sx={{
+            mt: 4,
+            p: 3,
+            bgcolor: 'primary.light',
             color: 'primary.contrastText',
             borderRadius: 2
           }}
@@ -101,7 +101,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
           <Typography variant="body1" paragraph>
             {data.comprehensionQuestion}
           </Typography>
-          
+
           <TextField
             fullWidth
             multiline
@@ -139,7 +139,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
         <Typography variant="h5" component="h3" gutterBottom color="primary.main" fontWeight="medium">
           {question.text}
         </Typography>
-        
+
         {question.image && (
           <Box sx={{ my: 3, textAlign: 'center' }}>
             <Card elevation={2}>
@@ -147,7 +147,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
                 component="img"
                 image={question.image}
                 alt="Question illustration"
-                sx={{ 
+                sx={{
                   maxHeight: 300,
                   objectFit: 'contain'
                 }}
@@ -172,7 +172,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
                     value={idx}
                     control={<Radio color="primary" />}
                     label={option}
-                    sx={{ 
+                    sx={{
                       mb: 1,
                       p: 1,
                       borderRadius: 1,
@@ -199,7 +199,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
                   value="true"
                   control={<Radio color="primary" />}
                   label="True"
-                  sx={{ 
+                  sx={{
                     mb: 1,
                     p: 1,
                     borderRadius: 1,
@@ -212,7 +212,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
                   value="false"
                   control={<Radio color="primary" />}
                   label="False"
-                  sx={{ 
+                  sx={{
                     mb: 1,
                     p: 1,
                     borderRadius: 1,
@@ -280,7 +280,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
             <Typography variant="body1" paragraph>
               {data.instructions || "Follow the interactive exercises below to complete this activity."}
             </Typography>
-            
+
             {/* Show exercises if available */}
             {data.exercises && data.exercises.length > 0 && (
               <Box sx={{ mt: 3 }}>
@@ -298,10 +298,10 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
                       </Typography>
                     )}
                     {exercise.number && (
-                      <Box sx={{ 
-                        bgcolor: 'info.light', 
-                        color: 'info.contrastText', 
-                        p: 2, 
+                      <Box sx={{
+                        bgcolor: 'info.light',
+                        color: 'info.contrastText',
+                        p: 2,
                         borderRadius: 1,
                         mt: 1,
                         textAlign: 'center'
@@ -335,21 +335,21 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
               color="success"
               size="large"
               onClick={() => {
-                onAn
+                onAnswerChange(true);
                 if (onComplete) {
-                  onCo);
+                  onComplete();
                 }
               }}
-              sx={{ 
-                adius: 4,
-              4,
+              sx={{
+                borderRadius: 4,
+                px: 4,
                 py: 1.5,
-                fontW 'bold',
+                fontWeight: 'bold',
                 boxShadow: 3
               }}
             >
-      ✓
-    utton>/B    <     Complete      Mark as   eight:
+              Mark as Complete ✓
+            </Button>
           </CardContent>
         </Card>
       </Box>
@@ -385,13 +385,13 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
             </Typography>
           </CardContent>
         </Card>
-        
-        <Paper 
-          elevation={0} 
-          sx={{ 
-            mt: 4, 
-            p: 3, 
-            bgcolor: 'primary.light', 
+
+        <Paper
+          elevation={0}
+          sx={{
+            mt: 4,
+            p: 3,
+            bgcolor: 'primary.light',
             color: 'primary.contrastText',
             borderRadius: 2
           }}
@@ -402,7 +402,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
           <Typography variant="body1" paragraph>
             {data.comprehensionQuestion}
           </Typography>
-          
+
           <TextField
             fullWidth
             multiline
@@ -426,15 +426,15 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
 
   const renderStaticStudyPlanResources = (activity: StudyActivity) => {
     // Extract subject and difficulty from activity
-    const subject = activity.title.toLowerCase().includes('math') ? 'Mathematics' : 
-                   activity.title.toLowerCase().includes('science') ? 'Science' :
-                   activity.title.toLowerCase().includes('english') ? 'English' : 'General';
-    
+    const subject = activity.title.toLowerCase().includes('math') ? 'Mathematics' :
+      activity.title.toLowerCase().includes('science') ? 'Science' :
+        activity.title.toLowerCase().includes('english') ? 'English' : 'General';
+
     const difficulty = activity.difficulty || 2;
-    
+
     // Static educational resources based on the activity
     const resources = getStaticResourcesForActivity(activity.title, subject, difficulty);
-    
+
     return (
       <Box>
         {/* Activity Header */}
@@ -447,17 +447,17 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
               {activity.description}
             </Typography>
             <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Typography variant="caption" sx={{ 
-                bgcolor: 'rgba(255,255,255,0.2)', 
-                px: 2, py: 0.5, 
-                borderRadius: 1 
+              <Typography variant="caption" sx={{
+                bgcolor: 'rgba(255,255,255,0.2)',
+                px: 2, py: 0.5,
+                borderRadius: 1
               }}>
                 Subject: {subject}
               </Typography>
-              <Typography variant="caption" sx={{ 
-                bgcolor: 'rgba(255,255,255,0.2)', 
-                px: 2, py: 0.5, 
-                borderRadius: 1 
+              <Typography variant="caption" sx={{
+                bgcolor: 'rgba(255,255,255,0.2)',
+                px: 2, py: 0.5,
+                borderRadius: 1
               }}>
                 Duration: ~{activity.estimatedDuration} minutes
               </Typography>
@@ -496,10 +496,10 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
                   {concept.description}
                 </Typography>
                 {concept.example && (
-                  <Box sx={{ 
-                    bgcolor: 'info.light', 
-                    color: 'info.contrastText', 
-                    p: 2, 
+                  <Box sx={{
+                    bgcolor: 'info.light',
+                    color: 'info.contrastText',
+                    p: 2,
                     borderRadius: 1,
                     mt: 1
                   }}>
@@ -576,7 +576,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
               color="success"
               size="large"
               onClick={() => onAnswerChange(true)}
-              sx={{ 
+              sx={{
                 borderRadius: 4,
                 px: 4,
                 py: 1.5,
@@ -593,7 +593,7 @@ const ActivityContent: React.FC<ActivityContentProps> = ({
   };
 
   // Helper function to generate static resources based on activity
-  const getStaticResourcesForActivity = (title: string, subject: string, difficulty: number) => {
+  const getStaticResourcesForActivity = (_title: string, subject: string, _difficulty: number) => {
     const baseResources = {
       Mathematics: {
         objectives: [

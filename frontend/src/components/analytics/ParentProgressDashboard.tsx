@@ -226,382 +226,467 @@ const ParentProgressDashboard: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" fontWeight="bold">
-          Parent Progress Dashboard
+    <Box>
+      {/* Header Section */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" fontWeight="bold" sx={{ mb: 1 }}>
+          Your Children
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Typography variant="caption" color="text.secondary">
-            Last updated: {new Date(dashboardData.lastUpdated).toLocaleTimeString()}
-          </Typography>
-          <Tooltip title={autoRefresh ? 'Auto-refresh enabled' : 'Auto-refresh disabled'}>
-            <IconButton 
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              color={autoRefresh ? 'primary' : 'default'}
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={fetchDashboardData}
-          >
-            Refresh
-          </Button>
-        </Box>
+        <Typography variant="body1" color="text.secondary">
+          Monitor your children's learning progress and achievements
+        </Typography>
       </Box>
 
-      {/* Aggregated Stats */}
+      {/* Children Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h3" color="primary" fontWeight="bold">
-                {dashboardData.aggregated.totalChildren}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Children
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h3" color="success.main" fontWeight="bold">
-                {dashboardData.aggregated.totalActivitiesCompleted}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Activities Completed
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h3" color="info.main" fontWeight="bold">
-                {formatDuration(dashboardData.aggregated.totalTimeSpent)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Study Time
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h3" color="warning.main" fontWeight="bold">
-                {dashboardData.aggregated.averageCompletionRate}%
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Avg Completion Rate
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h3" color="error.main" fontWeight="bold">
-                {dashboardData.aggregated.activeStreaks}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Active Streaks
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <Typography variant="h3" color="secondary.main" fontWeight="bold">
-                {dashboardData.aggregated.totalBadgesEarned}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Badges
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        {dashboardData.children.map((child, index) => (
+          <Grid item xs={12} md={6} key={child.childId}>
+            <Card 
+              sx={{ 
+                p: 3,
+                border: index === 0 ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                borderRadius: 3,
+                position: 'relative',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.1)'
+                }
+              }}
+              onClick={() => handleViewChildDetails(child)}
+            >
+              {index === 0 && (
+                <Chip 
+                  label="Selected" 
+                  size="small" 
+                  sx={{ 
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    bgcolor: '#3b82f6',
+                    color: 'white',
+                    fontWeight: 600
+                  }} 
+                />
+              )}
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Avatar 
+                  sx={{ 
+                    width: 48, 
+                    height: 48,
+                    bgcolor: '#3b82f6',
+                    fontSize: '1.25rem',
+                    fontWeight: 600
+                  }}
+                >
+                  {child.childName.charAt(0).toUpperCase()}
+                </Avatar>
+                <Box>
+                  <Typography variant="h6" fontWeight="bold" sx={{ mb: 0.5 }}>
+                    {child.childName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Grade {Math.floor(Math.random() * 8) + 1} {/* Placeholder grade */}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Progress: {child.overallProgress.completionRate}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Current: {child.studyPlans[0]?.subject || 'No active plan'}
+                </Typography>
+              </Box>
+
+              <LinearProgress 
+                variant="determinate" 
+                value={child.overallProgress.completionRate} 
+                sx={{ 
+                  height: 8, 
+                  borderRadius: 4,
+                  bgcolor: '#f1f5f9',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: '#10b981',
+                    borderRadius: 4
+                  }
+                }}
+              />
+
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography variant="body2" color="text.secondary">
+                    This week: {formatDuration(child.overallProgress.totalTimeSpent)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Streak: {child.streaks.currentDailyStreak} days
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    This week: {formatDuration(child.overallProgress.totalTimeSpent)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Streak: {child.streaks.currentDailyStreak} days
+                  </Typography>
+                </Box>
+              </Box>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
+
+      {/* Selected Child Dashboard */}
+      {dashboardData.children.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h5" fontWeight="bold" sx={{ mb: 3 }}>
+            Dashboard for {dashboardData.children[0].childName}
+          </Typography>
+          
+          <Grid container spacing={3}>
+            {/* Child Profile Card */}
+            <Grid item xs={12} md={4}>
+              <Card sx={{ p: 3, textAlign: 'center', borderRadius: 3 }}>
+                <Avatar 
+                  sx={{ 
+                    width: 80, 
+                    height: 80,
+                    bgcolor: '#3b82f6',
+                    fontSize: '2rem',
+                    fontWeight: 600,
+                    mx: 'auto',
+                    mb: 2
+                  }}
+                >
+                  {dashboardData.children[0].childName.charAt(0).toUpperCase()}
+                </Avatar>
+                <Typography variant="h6" fontWeight="bold" sx={{ mb: 0.5 }}>
+                  {dashboardData.children[0].childName}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Grade {Math.floor(Math.random() * 8) + 1}
+                </Typography>
+                
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h3" fontWeight="bold" color="success.main" sx={{ mb: 1 }}>
+                    {dashboardData.children[0].overallProgress.completionRate}%
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Overall Study Plan Progress
+                  </Typography>
+                </Box>
+              </Card>
+            </Grid>
+
+            {/* Current Subject Card */}
+            <Grid item xs={12} md={8}>
+              <Card sx={{ p: 3, borderRadius: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                  <Box sx={{ 
+                    p: 1.5, 
+                    bgcolor: '#10b981', 
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <SchoolIcon sx={{ color: 'white' }} />
+                  </Box>
+                  <Box>
+                    <Typography variant="h6" fontWeight="bold">
+                      Current Subject
+                    </Typography>
+                    <Typography variant="h5" fontWeight="bold" color="primary">
+                      {dashboardData.children[0].studyPlans[0]?.subject || 'Science'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Exploring the Solar System
+                    </Typography>
+                  </Box>
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      45 minutes today
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      75% complete
+                    </Typography>
+                  </Box>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={75} 
+                    sx={{ 
+                      height: 8, 
+                      borderRadius: 4,
+                      bgcolor: '#f1f5f9',
+                      '& .MuiLinearProgress-bar': {
+                        bgcolor: '#10b981',
+                        borderRadius: 4
+                      }
+                    }}
+                  />
+                </Box>
+              </Card>
+            </Grid>
+
+            {/* This Week Stats */}
+            <Grid item xs={12}>
+              <Card sx={{ p: 3, borderRadius: 3 }}>
+                <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
+                  This Week
+                </Typography>
+                
+                <Grid container spacing={4}>
+                  <Grid item xs={6} sm={3}>
+                    <Box>
+                      <Typography variant="h4" fontWeight="bold" sx={{ mb: 0.5 }}>
+                        {formatDuration(dashboardData.children[0].overallProgress.totalTimeSpent)}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Study Time
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Box>
+                      <Typography variant="h4" fontWeight="bold" sx={{ mb: 0.5 }}>
+                        {dashboardData.children[0].overallProgress.completedActivities}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Activities Completed
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Box>
+                      <Typography variant="h4" fontWeight="bold" sx={{ mb: 0.5 }}>
+                        {dashboardData.children[0].overallProgress.averageScore}%
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Average Score
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Box>
+                      <Typography variant="h4" fontWeight="bold" sx={{ mb: 0.5 }}>
+                        {dashboardData.children[0].streaks.currentDailyStreak} days
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Streak
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Card>
+            </Grid>
+          </Grid>
+        </Box>
+      )}
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={tabValue} onChange={handleTabChange}>
-          <Tab label="Children Overview" />
-          <Tab label="Study Plans Progress" />
-          <Tab label="Recent Activity" />
+          <Tab label="Study Plans" />
+          <Tab label="Reports" />
         </Tabs>
       </Box>
 
       <TabPanel value={tabValue} index={0}>
-        {/* Children Overview */}
         <Grid container spacing={3}>
-          {dashboardData.children.map((child) => (
-            <Grid item xs={12} md={6} lg={4} key={child.childId}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
-                        {child.childName.charAt(0).toUpperCase()}
-                      </Avatar>
-                      <Typography variant="h6" fontWeight="bold">
-                        {child.childName}
-                      </Typography>
+          {/* Weekly Study Chart */}
+          <Grid item xs={12} lg={8}>
+            <Card sx={{ p: 3, borderRadius: 3 }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
+                Weekly Study Time by Subject - {dashboardData.children[0]?.childName}
+              </Typography>
+              
+              {/* Mock Chart Data */}
+              <Box sx={{ height: 300, display: 'flex', alignItems: 'end', gap: 1, px: 2 }}>
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
+                  <Box key={day} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      width: '100%',
+                      height: 200 + Math.random() * 100,
+                      justifyContent: 'end',
+                      gap: 0.5
+                    }}>
+                      {/* Math */}
+                      <Box sx={{ 
+                        width: '100%', 
+                        height: 60 + Math.random() * 40,
+                        bgcolor: '#3b82f6',
+                        borderRadius: '4px 4px 0 0'
+                      }} />
+                      {/* Science */}
+                      <Box sx={{ 
+                        width: '100%', 
+                        height: 40 + Math.random() * 30,
+                        bgcolor: '#10b981'
+                      }} />
+                      {/* English */}
+                      <Box sx={{ 
+                        width: '100%', 
+                        height: 30 + Math.random() * 20,
+                        bgcolor: '#f59e0b',
+                        borderRadius: '0 0 4px 4px'
+                      }} />
                     </Box>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<ViewIcon />}
-                      onClick={() => handleViewChildDetails(child)}
-                    >
-                      Details
-                    </Button>
-                  </Box>
-
-                  {/* Progress Overview */}
-                  <Box sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        Overall Progress
-                      </Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        {child.overallProgress.completionRate}%
-                      </Typography>
-                    </Box>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={child.overallProgress.completionRate} 
-                      sx={{ height: 8, borderRadius: 4 }}
-                    />
-                  </Box>
-
-                  {/* Quick Stats */}
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h5" color="primary">
-                          {child.overallProgress.completedActivities}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Activities Done
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h5" color="success.main">
-                          {child.overallProgress.averageScore}%
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Avg Score
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h5" color="warning.main">
-                          {child.streaks.currentDailyStreak}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Day Streak
-                        </Typography>
-                      </Box>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="h5" color="info.main">
-                          {formatDuration(child.overallProgress.totalTimeSpent)}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          Study Time
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  </Grid>
-
-                  {/* Recent Badges */}
-                  {child.badges.recent.length > 0 && (
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Recent Achievements
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {child.badges.recent.slice(0, 3).map((badge, index) => (
-                          <Chip
-                            key={index}
-                            label={badge.title}
-                            size="small"
-                            color="secondary"
-                            icon={<TrophyIcon />}
-                          />
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-
-                  {/* Study Plans Summary */}
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Active Study Plans ({child.studyPlans.length})
+                    <Typography variant="caption" sx={{ mt: 1, fontWeight: 500 }}>
+                      {day}
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                      {child.studyPlans.slice(0, 3).map((plan) => (
-                        <Chip
-                          key={plan.id}
-                          label={`${plan.subject} (${plan.progressPercentage}%)`}
-                          size="small"
-                          color={getStatusColor(plan.status) as any}
-                          variant="outlined"
-                        />
-                      ))}
-                      {child.studyPlans.length > 3 && (
-                        <Chip
-                          label={`+${child.studyPlans.length - 3} more`}
-                          size="small"
-                          variant="outlined"
-                        />
-                      )}
-                    </Box>
                   </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
+                ))}
+              </Box>
+
+              {/* Legend */}
+              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 12, height: 12, bgcolor: '#3b82f6', borderRadius: 1 }} />
+                  <Typography variant="caption">Math</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 12, height: 12, bgcolor: '#10b981', borderRadius: 1 }} />
+                  <Typography variant="caption">Science</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 12, height: 12, bgcolor: '#f59e0b', borderRadius: 1 }} />
+                  <Typography variant="caption">English</Typography>
+                </Box>
+              </Box>
+            </Card>
+          </Grid>
+
+          {/* Recent Activities */}
+          <Grid item xs={12} lg={4}>
+            <Card sx={{ p: 3, borderRadius: 3 }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
+                Recent Activities - {dashboardData.children[0]?.childName}
+              </Typography>
+              
+              <List sx={{ p: 0 }}>
+                {[
+                  { title: 'Math Quiz: Fractions', subject: 'Math', date: '2025-09-14', icon: '⭐' },
+                  { title: 'Science Lab: Water Cycle', subject: 'Science', date: '2025-09-13', icon: '✅' },
+                  { title: 'Reading Comprehension', subject: 'English', date: '2025-09-13', icon: '⭐' },
+                  { title: 'Multiplication Tables', subject: 'Math', date: '2025-09-12', icon: '✅' },
+                  { title: 'Vocabulary Building', subject: 'English', date: '2025-09-12', icon: '⏰' }
+                ].map((activity, index) => (
+                  <React.Fragment key={index}>
+                    <ListItem sx={{ px: 0, py: 1.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                        <Typography sx={{ fontSize: '1.2rem' }}>
+                          {activity.icon}
+                        </Typography>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="body2" fontWeight="500">
+                            {activity.title}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {activity.date}
+                          </Typography>
+                        </Box>
+                        <Chip 
+                          label={activity.subject}
+                          size="small"
+                          sx={{ 
+                            bgcolor: activity.subject === 'Math' ? '#dbeafe' : 
+                                     activity.subject === 'Science' ? '#d1fae5' : '#fef3c7',
+                            color: activity.subject === 'Math' ? '#1e40af' : 
+                                   activity.subject === 'Science' ? '#065f46' : '#92400e',
+                            fontWeight: 500
+                          }}
+                        />
+                      </Box>
+                    </ListItem>
+                    {index < 4 && <Divider />}
+                  </React.Fragment>
+                ))}
+              </List>
+            </Card>
+          </Grid>
         </Grid>
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        {/* Study Plans Progress */}
+        {/* Reports and Analytics */}
         <Grid container spacing={3}>
-          {dashboardData.children.map((child) => (
-            <Grid item xs={12} key={child.childId}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    {child.childName}'s Study Plans
-                  </Typography>
-                  <Grid container spacing={2}>
-                    {child.studyPlans.map((plan) => (
-                      <Grid item xs={12} sm={6} md={4} key={plan.id}>
-                        <Card variant="outlined">
-                          <CardContent>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                              <Typography variant="subtitle1" fontWeight="bold">
-                                {plan.subject}
-                              </Typography>
-                              <Chip
-                                label={plan.status}
-                                size="small"
-                                color={getStatusColor(plan.status) as any}
-                              />
-                            </Box>
-                            
-                            <Box sx={{ mb: 2 }}>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Progress
-                                </Typography>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {plan.completedActivities}/{plan.totalActivities} ({plan.progressPercentage}%)
-                                </Typography>
-                              </Box>
-                              <LinearProgress 
-                                variant="determinate" 
-                                value={plan.progressPercentage} 
-                                sx={{ height: 6, borderRadius: 3 }}
-                              />
-                            </Box>
+          <Grid item xs={12}>
+            <Card sx={{ p: 3, borderRadius: 3 }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
+                Study Plans Progress Report
+              </Typography>
+              
+              <Grid container spacing={3}>
+                {dashboardData.children[0]?.studyPlans.map((plan) => (
+                  <Grid item xs={12} sm={6} md={4} key={plan.id}>
+                    <Card variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                          {plan.subject}
+                        </Typography>
+                        <Chip
+                          label={plan.status}
+                          size="small"
+                          color={getStatusColor(plan.status) as any}
+                        />
+                      </Box>
+                      
+                      <Box sx={{ mb: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Progress
+                          </Typography>
+                          <Typography variant="body2" fontWeight="bold">
+                            {plan.completedActivities}/{plan.totalActivities} ({plan.progressPercentage}%)
+                          </Typography>
+                        </Box>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={plan.progressPercentage} 
+                          sx={{ 
+                            height: 8, 
+                            borderRadius: 4,
+                            bgcolor: '#f1f5f9',
+                            '& .MuiLinearProgress-bar': {
+                              bgcolor: '#10b981',
+                              borderRadius: 4
+                            }
+                          }}
+                        />
+                      </Box>
 
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <TimerIcon fontSize="small" color="action" />
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatDuration(plan.timeSpent)}
-                                </Typography>
-                              </Box>
-                              {plan.lastActivity && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatTimeAgo(plan.lastActivity)}
-                                </Typography>
-                              )}
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TimerIcon fontSize="small" color="action" />
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDuration(plan.timeSpent)}
+                          </Typography>
+                        </Box>
+                        {plan.lastActivity && (
+                          <Typography variant="caption" color="text.secondary">
+                            {formatTimeAgo(plan.lastActivity)}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Card>
                   </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
+                ))}
+              </Grid>
+            </Card>
+          </Grid>
         </Grid>
       </TabPanel>
 
-      <TabPanel value={tabValue} index={2}>
-        {/* Recent Activity */}
-        <Grid container spacing={3}>
-          {dashboardData.children.map((child) => (
-            <Grid item xs={12} md={6} key={child.childId}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    {child.childName}'s Recent Activity
-                  </Typography>
-                  {child.recentActivity.length === 0 ? (
-                    <Alert severity="info">No recent activity</Alert>
-                  ) : (
-                    <List>
-                      {child.recentActivity.map((activity, index) => (
-                        <React.Fragment key={index}>
-                          <ListItem>
-                            <ListItemIcon>
-                              <ActivityIcon color="primary" />
-                            </ListItemIcon>
-                            <ListItemText
-                              primary={activity.activityTitle}
-                              secondary={
-                                <Box>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {activity.subject} • {formatTimeAgo(activity.completedAt)}
-                                  </Typography>
-                                  <Box sx={{ display: 'flex', gap: 2, mt: 0.5 }}>
-                                    {activity.score !== null && (
-                                      <Chip
-                                        label={`${activity.score}%`}
-                                        size="small"
-                                        color={activity.score >= 80 ? 'success' : activity.score >= 60 ? 'warning' : 'error'}
-                                        icon={<StarIcon />}
-                                      />
-                                    )}
-                                    <Chip
-                                      label={formatDuration(activity.timeSpent)}
-                                      size="small"
-                                      variant="outlined"
-                                      icon={<ScheduleIcon />}
-                                    />
-                                  </Box>
-                                </Box>
-                              }
-                            />
-                          </ListItem>
-                          {index < child.recentActivity.length - 1 && <Divider />}
-                        </React.Fragment>
-                      ))}
-                    </List>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </TabPanel>
+
 
       {/* Child Details Dialog */}
       <Dialog
