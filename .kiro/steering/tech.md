@@ -1,97 +1,102 @@
-# Technology Stack & Build System
+---
+inclusion: always
+---
 
-## Architecture
-- **Type**: Full-stack web application with microservices architecture
-- **Deployment**: Docker containerized with Docker Compose orchestration
-- **Database**: PostgreSQL with Prisma ORM
-- **Caching**: Redis for session management and rate limiting
-- **Reverse Proxy**: Nginx for load balancing and SSL termination
+# Technology Stack & Development Guidelines
 
-## Backend Stack
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js
-- **Database ORM**: Prisma with PostgreSQL
-- **Authentication**: JWT with refresh tokens, Passport.js for OAuth
-- **AI Integration**: Anthropic Claude API, Google Gemini API
-- **Email**: SendGrid for transactional emails
-- **File Upload**: Multer with Sharp for image processing
-- **Security**: Helmet, bcrypt, rate limiting, input validation with Zod/Joi
-- **Logging**: Winston with daily rotate file
-- **Testing**: Jest with Supertest for integration tests
+## Core Architecture
+- **Full-stack TypeScript application** with Express.js backend and React frontend
+- **PostgreSQL + Prisma ORM** for data persistence with comprehensive schema migrations
+- **Docker containerization** with multi-environment support (dev/prod)
+- **AI-powered educational platform** integrating Claude and Gemini APIs
+- **Child-safe environment** with comprehensive content filtering and parental controls
 
-## Frontend Stack
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite
-- **UI Library**: Material-UI (MUI) with Emotion styling
-- **Styling**: Tailwind CSS + MUI theme system
-- **State Management**: TanStack Query (React Query) for server state
-- **Forms**: React Hook Form with Zod validation
-- **Routing**: React Router DOM
-- **Charts**: Recharts for analytics visualization
-- **Animation**: Framer Motion
-- **Testing**: Jest + React Testing Library, Cypress for E2E
-- **Accessibility**: Built-in a11y testing with axe-core
-- **Storybook**: Component documentation and visual testing
+## Backend Development Standards
+- **TypeScript-first**: All new code must use TypeScript with strict mode
+- **Layered architecture**: Routes → Services → Database (avoid business logic in routes)
+- **Prisma ORM**: Use Prisma for all database operations, never raw SQL
+- **Error handling**: Use centralized error handling with Winston logging
+- **Security**: JWT with refresh tokens, rate limiting, input validation with Zod
+- **Testing**: Jest for unit tests, Supertest for integration tests
+
+### Backend File Patterns
+- Services in `src/services/` handle business logic
+- Routes in `src/routes/` handle HTTP requests only
+- Middleware in `src/middleware/` for cross-cutting concerns
+- Types in `src/types/` for shared TypeScript definitions
+- Utils in `src/utils/` for pure helper functions
+
+## Frontend Development Standards
+- **React 18 + TypeScript**: Use functional components with hooks
+- **MUI + Tailwind**: MUI for components, Tailwind for utility styling
+- **Dual themes**: Separate parent/child themes with accessibility compliance
+- **TanStack Query**: For all server state management (no Redux)
+- **React Hook Form + Zod**: For form handling and validation
+- **Component organization**: Group by feature, not by type
+
+### Frontend File Patterns
+- Components in `src/components/[feature]/` directories
+- Hooks in `src/hooks/` for reusable logic
+- Services in `src/services/` for API calls
+- Types in `src/types/` for TypeScript definitions
+- Utils in `src/utils/` for helper functions
+
+## Database & Prisma Guidelines
+- **Schema-first development**: Always update schema.prisma first
+- **Migration workflow**: Generate migrations for all schema changes
+- **Seeding**: Use seed.ts for development data, separate scripts for production
+- **Indexing**: Add database indexes for performance-critical queries
+- **Relations**: Use Prisma relations, avoid manual foreign key management
+
+## AI Integration Patterns
+- **Claude API**: Primary AI for study plan generation and content creation
+- **Gemini API**: Secondary AI for content analysis and recommendations
+- **Content safety**: All AI-generated content must pass safety validation
+- **Rate limiting**: Implement proper rate limiting for AI API calls
+- **Error handling**: Graceful degradation when AI services are unavailable
+
+## Security & Child Safety Requirements
+- **Content filtering**: All user-generated and AI content must be filtered
+- **Parental controls**: Parents must approve all child interactions
+- **Session management**: Secure JWT handling with refresh token rotation
+- **Input validation**: Validate all inputs with Zod schemas
+- **Logging**: Comprehensive security event logging
+
+## Testing Requirements
+- **Unit tests**: Required for all services and utilities
+- **Integration tests**: Required for all API endpoints
+- **E2E tests**: Required for critical user flows
+- **Accessibility tests**: Required for all UI components
+- **Visual regression**: Use Storybook + Chromatic for component testing
+
+## Performance Standards
+- **Database**: Use indexes, avoid N+1 queries, implement caching
+- **Frontend**: Code splitting, lazy loading, optimized images
+- **API**: Response caching, rate limiting, request optimization
+- **Monitoring**: Performance metrics and error tracking
 
 ## Development Commands
-
-### Backend
 ```bash
-# Development
-npm run dev              # Start development server with hot reload
-npm run build           # Compile TypeScript to JavaScript
-npm run start           # Start production server
-npm test               # Run Jest tests
-npm run test:watch     # Run tests in watch mode
+# Backend
+npm run dev              # Development with hot reload
+npm run prisma:migrate   # Run database migrations
+npm run prisma:studio    # Database GUI
+npm test                 # Run all tests
 
-# Database
-npm run prisma:generate # Generate Prisma client
-npm run prisma:migrate  # Run database migrations
-npm run prisma:studio   # Open Prisma Studio GUI
-npm run db:setup        # Initialize database with migrations
+# Frontend  
+npm run dev              # Vite dev server
+npm run test:e2e         # Cypress E2E tests
+npm run storybook        # Component documentation
+npm run test:a11y        # Accessibility tests
+
+# Docker
+docker-compose up -d     # Start all services
+docker-compose logs -f backend  # View logs
 ```
 
-### Frontend
-```bash
-# Development
-npm run dev             # Start Vite dev server
-npm run build          # Build for production
-npm run preview        # Preview production build
-npm test               # Run Jest unit tests
-npm run test:watch     # Run tests in watch mode
-
-# E2E Testing
-npm run cypress:open    # Open Cypress GUI
-npm run cypress:run     # Run Cypress tests headlessly
-npm run test:e2e        # Run full E2E test suite
-
-# Accessibility & Performance
-npm run test:a11y       # Run accessibility tests
-npm run test:responsive # Run responsive design tests
-npm run analyze         # Analyze bundle size
-
-# Storybook
-npm run storybook       # Start Storybook dev server
-npm run build-storybook # Build Storybook for production
-npm run chromatic       # Run visual regression tests
-```
-
-### Docker Operations
-```bash
-# Development
-docker-compose up -d              # Start all services
-docker-compose logs -f backend    # View backend logs
-docker-compose exec backend bash # Access backend container
-
-# Production
-docker-compose -f docker-compose.prod.yml up -d        # Deploy production
-docker-compose -f docker-compose.prod.yml exec backend npx prisma migrate deploy
-```
-
-## Key Dependencies
-- **AI APIs**: @anthropic-ai/sdk, @google/generative-ai
-- **Authentication**: passport, passport-google-oauth20, passport-apple
-- **Security**: helmet, bcrypt, rate-limiter-flexible
-- **Validation**: zod (shared), joi (backend), @hookform/resolvers (frontend)
-- **File Processing**: multer, sharp
-- **Testing**: jest, cypress, @testing-library/react, supertest
+## Code Quality Standards
+- **ESLint + Prettier**: Enforce consistent code formatting
+- **TypeScript strict mode**: No any types, proper type definitions
+- **Error boundaries**: Implement error boundaries for React components
+- **Accessibility**: WCAG 2.1 AA compliance for all UI components
+- **Documentation**: JSDoc comments for all public APIs

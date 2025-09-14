@@ -1,7 +1,7 @@
 # Project Structure & Organization
 
 ## Root Directory Structure
-```
+
 ├── backend/           # Node.js/Express API server
 ├── frontend/          # React/Vite client application
 ├── nginx/             # Nginx reverse proxy configuration
