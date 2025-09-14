@@ -4,7 +4,7 @@
   "description": "AI-powered educational platform for children with comprehensive parental controls",
   "main": "index.js",
   "scripts": {
-    "start": "cd backend && npx ts-node src/index.ts",
+    "start": "cd backend && npx ts-node --transpile-only src/index.ts",
     "build": "cd backend && npx prisma generate",
     "install": "cd backend && npm install",
     "test": "cd backend && npm test",
