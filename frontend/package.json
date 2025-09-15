@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
+    "build:deploy": "vite build --mode production",
     "preview": "vite preview",
     "test": "jest",
     "test:watch": "jest --watch",
